@@ -11,11 +11,7 @@ import LlmRuntime, {
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt, { type PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import RequestFlightRecorder from '../src/index.js'
-import {
-  RequestAttemptId,
-  type FlightOutcome,
-  type RequestAttemptId as RequestAttemptIdType,
-} from '../src/types.js'
+import { RequestAttemptId } from '../src/types.js'
 
 function fakeAgent(ctx: Context, id: string): Agent {
   const session = Session.create(SessionId(id))
@@ -492,33 +488,6 @@ describe('RequestFlightRecorder', () => {
     expect(world.recorder.diff(missingA, to!.id)).toEqual({
       kind: 'missing',
       ids: [missingA],
-    })
-  })
-
-  it('counts a request completion only once under duplicate settlement', async () => {
-    const world = await createWorld()
-    const signal = new AbortController().signal
-    await prepareRequest(world, signal)
-    world.ctx.agents.withInitiator(world.agent, () => (
-      world.ctx.waterfall('llm/stream', loopRequest(world.agent, signal), completedStream)
-    ))
-    const record = world.recorder.latest()!
-    const internals = world.recorder as unknown as {
-      finishRecord(id: RequestAttemptIdType, outcome: FlightOutcome): void
-    }
-    const outcome: FlightOutcome = {
-      kind: 'incomplete',
-      reason: 'consumer-returned',
-      totalMs: 1,
-    }
-
-    internals.finishRecord(record.id, outcome)
-    internals.finishRecord(record.id, outcome)
-
-    expect(world.recorder.health()).toMatchObject({
-      captured: 1,
-      completed: 1,
-      active: 0,
     })
   })
 

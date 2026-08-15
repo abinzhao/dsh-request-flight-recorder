@@ -216,4 +216,39 @@ describe('FlightRecorderState', () => {
       },
     })
   })
+
+  it('saturates revision at the maximum safe integer', () => {
+    const state = new FlightRecorderState(2)
+    const internals = state as unknown as { revision: number }
+    internals.revision = Number.MAX_SAFE_INTEGER
+
+    state.capture(flightRecord('first'))
+
+    expect(state.snapshot().revision).toBe(Number.MAX_SAFE_INTEGER)
+    expect(Number.isSafeInteger(state.snapshot().revision)).toBe(true)
+  })
+
+  it('keeps 10,000 settled transactions bounded', () => {
+    const state = new FlightRecorderState(128)
+
+    for (let index = 0; index < 10_000; index += 1) {
+      const record = flightRecord(`id-${index}`, {
+        turn: Math.floor(index / 100),
+        step: index % 100,
+      })
+      state.capture(record)
+      state.settle(record.id, finished)
+    }
+
+    expect(state.snapshot()).toMatchObject({
+      revision: 20_000,
+      health: {
+        captured: 10_000,
+        completed: 10_000,
+        active: 0,
+        retained: 128,
+        evicted: 9_872,
+      },
+    })
+  })
 })

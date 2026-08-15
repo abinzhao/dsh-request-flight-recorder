@@ -12,11 +12,9 @@ import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import RequestFlightRecorder from '../src/index.js'
 import type {
-  FlightOutcome,
   FlightRecorderChange,
   FlightRecorderListener,
   FlightRecorderSnapshot,
-  RequestAttemptId,
 } from '../src/types.js'
 
 const contexts: Context[] = []
@@ -160,7 +158,7 @@ describe('FlightRecorderSnapshot', () => {
     expect(world.recorder.snapshot().revision).toBe(2)
   })
 
-  it('does not increment for direct requests or duplicate settlement', async () => {
+  it('does not increment for direct requests', async () => {
     const world = await createWorld()
     await world.ctx.waterfall('llm/stream', {
       provider: 'deepseek',
@@ -171,21 +169,10 @@ describe('FlightRecorderSnapshot', () => {
 
     const signal = new AbortController().signal
     await prepareRequest(world, signal)
-    world.ctx.agents.withInitiator(world.agent, () => (
+    const observed = world.ctx.agents.withInitiator(world.agent, () => (
       world.ctx.waterfall('llm/stream', loopRequest(world, signal), terminalStream)
     ))
-    const record = world.recorder.latest()!
-    const internals = world.recorder as unknown as {
-      finishRecord(id: RequestAttemptId, outcome: FlightOutcome): void
-    }
-    const outcome: FlightOutcome = {
-      kind: 'incomplete',
-      reason: 'consumer-returned',
-      totalMs: 1,
-    }
-    internals.finishRecord(record.id, outcome)
-    expect(world.recorder.snapshot().revision).toBe(2)
-    internals.finishRecord(record.id, outcome)
+    for await (const _chunk of observed) {}
     expect(world.recorder.snapshot().revision).toBe(2)
   })
 
@@ -256,23 +243,6 @@ describe('FlightRecorderSnapshot', () => {
       evicted: 1,
       truncatedRecords: 1,
     })
-  })
-
-  it('saturates revision at the maximum safe integer', async () => {
-    const world = await createWorld()
-    const internals = world.recorder as unknown as {
-      revision: number
-    }
-    internals.revision = Number.MAX_SAFE_INTEGER
-
-    await world.ctx.waterfall(
-      'llm/stream',
-      loopRequest(world),
-      terminalStream,
-    )
-
-    expect(world.recorder.snapshot().revision).toBe(Number.MAX_SAFE_INTEGER)
-    expect(Number.isSafeInteger(world.recorder.snapshot().revision)).toBe(true)
   })
 
   it('coalesces subscriber invalidation outside the capture stack', async () => {

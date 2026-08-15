@@ -11,12 +11,13 @@ import LlmRuntime, {
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt, { type PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import {
+  normalizeFlightObservation,
   registerHarnessAdapter,
-  type HarnessCaptureHandlers,
 } from '../src/harness-adapter.js'
+import { FlightRecorderState } from '../src/recorder-state.js'
 
-function fakeAgent(ctx: Context): Agent {
-  const session = Session.create(SessionId('session-a'))
+function fakeAgent(ctx: Context, id = 'session-a'): Agent {
+  const session = Session.create(SessionId(id))
   return {
     id: session.id,
     options: { provider: 'deepseek', model: 'deepseek-chat' },
@@ -26,7 +27,9 @@ function fakeAgent(ctx: Context): Agent {
     ctx,
     cancel() {},
     async whenIdle() {},
-    async runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    async runMaintenance<T>(
+      task: (signal: AbortSignal) => Promise<T>,
+    ): Promise<T> {
       return task(new AbortController().signal)
     },
     send() {},
@@ -36,154 +39,278 @@ function fakeAgent(ctx: Context): Agent {
   }
 }
 
-async function consume(stream: AsyncIterable<StreamChunk>): Promise<StreamChunk[]> {
+function stream(chunks: readonly StreamChunk[]): AsyncIterable<StreamChunk> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield* chunks
+    },
+  }
+}
+
+async function consume(
+  source: AsyncIterable<StreamChunk>,
+): Promise<StreamChunk[]> {
   const chunks: StreamChunk[] = []
-  for await (const chunk of stream) chunks.push(chunk)
+  for await (const chunk of source) chunks.push(chunk)
   return chunks
 }
 
+function loopRequest(agent: Agent, signal?: AbortSignal): GenerateOptions {
+  return markAgentLoopRequest({
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    messages: [],
+    system: 'TOP_SECRET_SYSTEM',
+    sessionId: agent.session.id,
+    ...(signal === undefined ? {} : { signal }),
+  })
+}
+
+async function prepare(
+  ctx: Context,
+  agent: Agent,
+  signal: AbortSignal,
+  turn = 1,
+  step = 1,
+): Promise<void> {
+  const assembly: PromptAssembly = {
+    sections: [{ name: 'persona', text: 'TOP_SECRET_PERSONA' }],
+    contexts: [{ name: 'workspace', text: 'TOP_SECRET_CONTEXT' }],
+    tools: [],
+    variables: { cwd: 'TOP_SECRET_VARIABLE' },
+  }
+  await ctx.waterfall(
+    'system-prompt/assemble',
+    assembly,
+    { agent, signal },
+    async () => assembly,
+  )
+  await ctx.waterfall(
+    'agent/request',
+    { agent, turn, step, signal },
+    async () => ({ provider: 'deepseek', model: 'deepseek-chat' }),
+  )
+}
+
 const contexts: Context[] = []
+
+async function world() {
+  const ctx = new Context()
+  contexts.push(ctx)
+  await ctx.plugin(LlmRuntime)
+  await ctx.plugin(SystemPrompt, {
+    includeHarnessIdentity: false,
+    persona: '',
+  })
+  await ctx.plugin(AgentRegistry)
+  const state = new FlightRecorderState(8)
+  registerHarnessAdapter(ctx, state)
+  return { ctx, state, agent: fakeAgent(ctx) }
+}
 
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
 })
 
 describe('registerHarnessAdapter', () => {
-  it('translates official payloads and preserves downstream identities', async () => {
-    const ctx = new Context()
-    contexts.push(ctx)
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(SystemPrompt, {
-      includeHarnessIdentity: false,
-      persona: '',
+  it('normalizes terminal failure observations without raw failure fields', () => {
+    expect(normalizeFlightObservation({
+      kind: 'finished',
+      finish: {
+        kind: 'error',
+        failure: { message: 'TOP_SECRET' },
+      },
+      totalMs: 10,
+    })).toEqual({
+      kind: 'threw',
+      error: { kind: 'error' },
+      totalMs: 10,
     })
-    await ctx.plugin(AgentRegistry)
-    const agent = fakeAgent(ctx)
-    const signal = new AbortController().signal
-    const assembly: PromptAssembly = {
-      sections: [],
-      contexts: [],
-      tools: [],
-      variables: {},
-    }
-    const chunks: StreamChunk[] = [{ type: 'finish', reason: { kind: 'stop' } }]
-    const stream: AsyncIterable<StreamChunk> = {
-      async *[Symbol.asyncIterator]() {
-        yield* chunks
+    expect(normalizeFlightObservation({
+      kind: 'finished',
+      finish: {
+        kind: 'aborted',
+        failure: { message: 'TOP_SECRET' },
       },
-    }
-    const seen: Parameters<HarnessCaptureHandlers['assembled']>[0][] = []
-    let requestInput: Parameters<HarnessCaptureHandlers['requested']>[0] | undefined
-    let streamInput: Parameters<HarnessCaptureHandlers['streaming']>[0] | undefined
-    let assemblyNext = 0
-    let requestNext = 0
-    let streamNext = 0
-
-    registerHarnessAdapter(ctx, {
-      assembled(input) {
-        seen.push(input)
-      },
-      requested(input) {
-        requestInput = input
-      },
-      streaming(input) {
-        streamInput = input
-        return input.next()
-      },
-      projectionFailed() {
-        throw new Error('unexpected projection failure')
-      },
+      firstChunkMs: 2,
+      totalMs: 10,
+      usage: { inputTokens: 3, outputTokens: 4 },
+    })).toEqual({
+      kind: 'threw',
+      error: { kind: 'error' },
+      firstChunkMs: 2,
+      totalMs: 10,
+      usage: { inputTokens: 3, outputTokens: 4 },
     })
-
-    const assembled = await ctx.waterfall(
-      'system-prompt/assemble',
-      assembly,
-      { agent, signal },
-      async () => {
-        assemblyNext += 1
-        return assembly
-      },
-    )
-    const config = { provider: 'deepseek', model: 'deepseek-chat' }
-    const requested = await ctx.waterfall(
-      'agent/request',
-      { agent, turn: 2, step: 3, signal },
-      async () => {
-        requestNext += 1
-        return config
-      },
-    )
-    const options = markAgentLoopRequest({
-      provider: 'deepseek',
-      model: 'deepseek-chat',
-      messages: [],
-      sessionId: agent.session.id,
-      signal,
-    })
-    const observed = ctx.agents.withInitiator(agent, () => (
-      ctx.waterfall('llm/stream', options, () => {
-        streamNext += 1
-        return stream
-      })
-    ))
-
-    expect(assembled).toBe(assembly)
-    expect(requested).toBe(config)
-    expect(await consume(observed)).toEqual(chunks)
-    expect(assemblyNext).toBe(1)
-    expect(requestNext).toBe(1)
-    expect(streamNext).toBe(1)
-    expect(seen).toEqual([{ assembly, agent, signal }])
-    expect(requestInput).toEqual({
-      agent,
-      sessionId: agent.session.id,
-      turn: 2,
-      step: 3,
-      signal,
-    })
-    expect(streamInput?.options).toBe(options)
-    expect(streamInput?.initiator).toBe(agent)
   })
 
-  it('bypasses unmarked streams and keeps event registration in the adapter', async () => {
-    const ctx = new Context()
-    contexts.push(ctx)
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(SystemPrompt, {
-      includeHarnessIdentity: false,
-      persona: '',
-    })
-    await ctx.plugin(AgentRegistry)
-    let streamingCalls = 0
-    let nextCalls = 0
-    const handlers: HarnessCaptureHandlers = {
-      assembled() {},
-      requested() {},
-      streaming(input) {
-        streamingCalls += 1
-        return input.next()
-      },
-      projectionFailed() {},
+  it('owns projection, correlation, attempts, and transparent settlement', async () => {
+    const { ctx, state, agent } = await world()
+    const chunks: StreamChunk[] = [
+      { type: 'usage', usage: { inputTokens: 12, outputTokens: 4 } },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ]
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const signal = new AbortController().signal
+      await prepare(ctx, agent, signal, 3, 2)
+      const options = loopRequest(agent, signal)
+      const downstream = stream(chunks)
+      let received: GenerateOptions | undefined
+      const observed = ctx.agents.withInitiator(agent, () => (
+        ctx.waterfall('llm/stream', options, () => {
+          received = options
+          return downstream
+        })
+      ))
+
+      expect(received).toBe(options)
+      expect(await consume(observed)).toEqual(chunks)
+      expect(state.latest()?.attempt).toBe(attempt)
     }
-    registerHarnessAdapter(ctx, handlers)
-    const options: GenerateOptions = {
+
+    const snapshot = state.snapshot()
+    expect(snapshot).toMatchObject({
+      revision: 4,
+      health: {
+        captured: 2,
+        completed: 2,
+        active: 0,
+        correlationMisses: 0,
+        projectionFailures: 0,
+      },
+    })
+    expect(snapshot.records[0]).toMatchObject({
+      turn: 3,
+      step: 2,
+      attempt: 2,
+      request: {
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        systemCharacters: 17,
+      },
+      promptAssembly: {
+        sections: [{ name: 'persona', characters: 18 }],
+        contexts: [{ name: 'workspace', characters: 18 }],
+        variables: ['cwd'],
+      },
+      outcome: {
+        kind: 'finished',
+        finish: { kind: 'stop' },
+        usage: { inputTokens: 12, outputTokens: 4 },
+      },
+    })
+    expect(JSON.stringify(snapshot)).not.toContain('TOP_SECRET')
+  })
+
+  it('bypasses direct requests and counts strict correlation misses', async () => {
+    const { ctx, state, agent } = await world()
+    const downstream = stream([
+      { type: 'finish', reason: { kind: 'stop' } },
+    ])
+    const direct: GenerateOptions = {
       provider: 'deepseek',
       model: 'deepseek-chat',
       messages: [],
-      sessionId: SessionId('session-a'),
-      signal: new AbortController().signal,
+      sessionId: agent.session.id,
     }
-    await consume(ctx.waterfall('llm/stream', options, () => {
-      nextCalls += 1
-      return {
-        async *[Symbol.asyncIterator]() {
-          yield { type: 'finish', reason: { kind: 'stop' } } as StreamChunk
-        },
-      }
-    }))
 
-    expect(streamingCalls).toBe(0)
-    expect(nextCalls).toBe(1)
+    expect(ctx.waterfall('llm/stream', direct, () => downstream)).toBe(
+      downstream,
+    )
+    await consume(ctx.waterfall(
+      'llm/stream',
+      loopRequest(agent),
+      () => downstream,
+    ))
+
+    const missingPendingSignal = new AbortController().signal
+    await consume(ctx.agents.withInitiator(agent, () => ctx.waterfall(
+      'llm/stream',
+      loopRequest(agent, missingPendingSignal),
+      () => downstream,
+    )))
+
+    const agentSignal = new AbortController().signal
+    await prepare(ctx, agent, agentSignal)
+    const other = fakeAgent(ctx, 'session-b')
+    await consume(ctx.agents.withInitiator(other, () => ctx.waterfall(
+      'llm/stream',
+      loopRequest(agent, agentSignal),
+      () => downstream,
+    )))
+
+    const sessionSignal = new AbortController().signal
+    await prepare(ctx, agent, sessionSignal)
+    await consume(ctx.agents.withInitiator(agent, () => ctx.waterfall(
+      'llm/stream',
+      markAgentLoopRequest({
+        ...loopRequest(agent, sessionSignal),
+        sessionId: other.session.id,
+      }),
+      () => downstream,
+    )))
+
+    expect(state.snapshot()).toMatchObject({
+      revision: 4,
+      records: [],
+      health: {
+        captured: 0,
+        correlationMisses: 4,
+        correlationMissesByReason: {
+          'missing-signal': 1,
+          'missing-pending': 1,
+          'agent-mismatch': 1,
+          'session-mismatch': 1,
+        },
+      },
+    })
+  })
+
+  it('contains projection failures and keeps event registration local', async () => {
+    const { ctx, state, agent } = await world()
+    const signal = new AbortController().signal
+    await prepare(ctx, agent, signal)
+    const options = loopRequest(agent, signal)
+    Object.defineProperty(options, 'messages', {
+      get() {
+        throw new Error('TOP_SECRET_PROJECTION')
+      },
+    })
+    const downstream = stream([
+      { type: 'finish', reason: { kind: 'stop' } },
+    ])
+
+    expect(ctx.agents.withInitiator(agent, () => (
+      ctx.waterfall('llm/stream', options, () => downstream)
+    ))).toBe(downstream)
+    expect(state.snapshot()).toMatchObject({
+      revision: 1,
+      records: [],
+      health: { projectionFailures: 1 },
+    })
+
+    const invalidPayload = {
+      agent,
+      turn: 1,
+      step: 1,
+    } as {
+      agent: Agent
+      turn: number
+      step: number
+      signal: AbortSignal
+    }
+    Object.defineProperty(invalidPayload, 'signal', {
+      get() {
+        throw new Error('TOP_SECRET_AGENT_REQUEST')
+      },
+    })
+    await ctx.waterfall(
+      'agent/request',
+      invalidPayload,
+      async () => ({ provider: 'deepseek', model: 'deepseek-chat' }),
+    )
+    expect(state.health().projectionFailures).toBe(2)
 
     const sourceRoot = join(import.meta.dirname, '..', 'src')
     const files = (await readdir(sourceRoot))
@@ -197,42 +324,5 @@ describe('registerHarnessAdapter', () => {
       }
     }
     expect(registrations).toEqual(['harness-adapter.ts'])
-  })
-
-  it('reports request handler failures without replacing downstream config', async () => {
-    const ctx = new Context()
-    contexts.push(ctx)
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(SystemPrompt, {
-      includeHarnessIdentity: false,
-      persona: '',
-    })
-    await ctx.plugin(AgentRegistry)
-    const agent = fakeAgent(ctx)
-    const signal = new AbortController().signal
-    const failure = new Error('request projection failed')
-    const failures: Array<readonly [string, unknown]> = []
-    registerHarnessAdapter(ctx, {
-      assembled() {},
-      requested() {
-        throw failure
-      },
-      streaming(input) {
-        return input.next()
-      },
-      projectionFailed(stage, error) {
-        failures.push([stage, error])
-      },
-    })
-    const config = { provider: 'deepseek', model: 'deepseek-chat' }
-
-    const result = await ctx.waterfall(
-      'agent/request',
-      { agent, turn: 1, step: 1, signal },
-      async () => config,
-    )
-
-    expect(result).toBe(config)
-    expect(failures).toEqual([['agent/request', failure]])
   })
 })

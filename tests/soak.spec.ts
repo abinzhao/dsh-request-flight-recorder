@@ -9,13 +9,7 @@ import LlmRuntime, {
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import RequestFlightRecorder from '../src/index.js'
-import { FLIGHT_LIMITS } from '../src/limits.js'
-import type {
-  FlightOutcome,
-  RequestAttemptId,
-} from '../src/types.js'
 
-const SECRET = 'TOP_SECRET_SOAK_VALUE'
 const contexts: Context[] = []
 
 function fakeAgent(ctx: Context, id: string): Agent {
@@ -166,67 +160,4 @@ describe('recorder lifecycle and soak evidence', () => {
     })
   })
 
-  it('keeps 10,000 deterministic records bounded and content-free', async () => {
-    const ctx = await createRoot()
-    await ctx.plugin(RequestFlightRecorder, { capacity: 128 })
-    const recorder = ctx.requestFlightRecorder
-    const agent = fakeAgent(ctx, 'session-soak')
-    const options: GenerateOptions = {
-      provider: 'deepseek',
-      model: 'deepseek-chat',
-      messages: [],
-      system: SECRET,
-      sessionId: agent.session.id,
-      tools: [{
-        name: 'read_file',
-        description: SECRET,
-        parameters: { type: 'object' },
-      }],
-    }
-    const internals = recorder as unknown as {
-      beginRecord(
-        options: GenerateOptions,
-        pending: {
-          readonly agent: Agent
-          readonly sessionId: SessionId
-          readonly turn: number
-          readonly step: number
-        },
-      ): RequestAttemptId
-      finishRecord(id: RequestAttemptId, outcome: FlightOutcome): void
-    }
-    const outcome: FlightOutcome = {
-      kind: 'finished',
-      finish: { kind: 'stop' },
-      totalMs: 1,
-    }
-
-    for (let index = 0; index < 10_000; index += 1) {
-      const id = internals.beginRecord(options, {
-        agent,
-        sessionId: agent.session.id,
-        turn: Math.floor(index / 100),
-        step: index % 100,
-      })
-      internals.finishRecord(id, outcome)
-    }
-
-    const snapshot = recorder.snapshot()
-    expect(snapshot.records).toHaveLength(128)
-    expect(snapshot.health).toMatchObject({
-      captured: 10_000,
-      completed: 10_000,
-      active: 0,
-      retained: 128,
-      evicted: 9_872,
-    })
-    expect(Number.isSafeInteger(snapshot.revision)).toBe(true)
-    expect(snapshot.records.every(record => (
-      record.request.tools.length <= FLIGHT_LIMITS.tools
-      && Object.keys(record.request.messages.byRole).length <= FLIGHT_LIMITS.messageCounterKeys
-      && Object.keys(record.request.messages.bySource).length <= FLIGHT_LIMITS.messageCounterKeys
-      && Object.keys(record.request.messages.byBlockType).length <= FLIGHT_LIMITS.messageCounterKeys
-    ))).toBe(true)
-    expect(JSON.stringify(snapshot)).not.toContain(SECRET)
-  })
 })
