@@ -50,6 +50,7 @@
     "build": "tsdown",
     "prepack": "pnpm build",
     "smoke:packed": "node scripts/smoke-packed.mjs",
+    "verify:dsh-profile": "node scripts/verify-dsh-profile.mjs",
     "check": "pnpm test:coverage && pnpm typecheck && pnpm build && publint"
   },
   "keywords": [

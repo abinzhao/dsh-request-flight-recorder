@@ -189,6 +189,28 @@ describe('distribution automation contract', () => {
     }
   })
 
+  it('defines an isolated public DSH profile gate', async () => {
+    const manifest = await readManifest()
+    const script = await readProjectFile('scripts/verify-dsh-profile.mjs')
+
+    expect(manifest.scripts['verify:dsh-profile']).toBe(
+      'node scripts/verify-dsh-profile.mjs',
+    )
+    for (const token of [
+      'mkdtemp',
+      'DSH_HOME',
+      '@deepseek-ai/dsh@',
+      'plugin',
+      'add',
+      '--dump-config',
+      '--port',
+      'request-flight-recorder',
+      'SIGTERM',
+    ]) {
+      expect(script).toContain(token)
+    }
+  })
+
   it('runs every release gate in CI', async () => {
     const workflow = await readProjectFile('.github/workflows/ci.yml')
 
