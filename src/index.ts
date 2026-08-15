@@ -69,34 +69,62 @@ export default class RequestFlightRecorder
     })
   }
 
+  /** Return the stable protocol, schema, and capability handshake. */
   info(): FlightRecorderInfo {
     return this.state.info()
   }
 
+  /** Read one deeply frozen atomic view of recorder state. */
   snapshot(query?: FlightRecordQuery): FlightRecorderSnapshot {
     return this.state.snapshot(query)
   }
 
+  /** Subscribe to coalesced out-of-stack recorder invalidations. */
   subscribe(listener: FlightRecorderListener): () => void {
     return this.state.subscribe(listener)
   }
 
+  /**
+   * List retained records from newest to oldest.
+   * @param query - optional record filters.
+   * @returns a frozen detached array of immutable records.
+   */
   list(query?: FlightRecordQuery): readonly FlightRecord[] {
     return this.state.list(query)
   }
 
+  /**
+   * Read one retained request attempt.
+   * @param id - request-attempt identity.
+   * @returns the immutable record when it remains retained.
+   */
   get(id: RequestAttemptId): FlightRecord | undefined {
     return this.state.get(id)
   }
 
+  /**
+   * Read the newest retained request attempt.
+   * @param sessionId - optional session filter.
+   * @returns the newest matching immutable record.
+   */
   latest(sessionId?: SessionId): FlightRecord | undefined {
     return this.state.latest(sessionId)
   }
 
+  /**
+   * Compare two retained attempts without exceptional missing-id control flow.
+   * @param fromId - earlier retained request-attempt identity.
+   * @param toId - later retained request-attempt identity.
+   * @returns a frozen structural diff or exact missing identities.
+   */
   diff(fromId: RequestAttemptId, toId: RequestAttemptId): FlightDiffResult {
     return this.state.diff(fromId, toId)
   }
 
+  /**
+   * Read a fresh process-local health snapshot.
+   * @returns frozen capture, settlement, retention, and failure counters.
+   */
   health(): FlightRecorderHealth {
     return this.state.health()
   }

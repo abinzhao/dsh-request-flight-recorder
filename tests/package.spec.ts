@@ -396,6 +396,20 @@ describe('public documentation contract', () => {
     }
   })
 
+  it('documents deep recorder ownership and atomic command reads', async () => {
+    const architecture = await readProjectFile('docs/architecture.md')
+
+    for (const term of [
+      'FlightRecorderState',
+      'registerHarnessAdapter',
+      'transaction',
+      'one atomic Snapshot',
+      'does not know DSH event payloads',
+    ]) {
+      expect(architecture).toContain(term)
+    }
+  })
+
   it('keeps release history for v1, v0.2, and v0.1', async () => {
     const changelog = await readProjectFile('CHANGELOG.md')
 

@@ -1,6 +1,6 @@
 import { Context, Service } from "@deepseek-ai/cordis";
-import { FinishReason, TokenUsage } from "@deepseek-ai/dsh-llm";
 import z from "@deepseek-ai/schemastery";
+import { FinishReason, TokenUsage } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { Branded } from "@deepseek-ai/dsh-brand";
 //#region src/types.d.ts
@@ -256,29 +256,14 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 /** Content-free recorder for loop-built model requests and stream outcomes. */
-declare class RequestFlightRecorder extends Service {
+declare class RequestFlightRecorder extends Service implements FlightRecorderReader {
   static inject: string[];
   static Config: z<Schemastery.ObjectS<{
     capacity: z<number, number>;
   }>, Schemastery.ObjectT<{
     capacity: z<number, number>;
   }>>;
-  private readonly store;
-  private promptBySignal;
-  private pendingBySignal;
-  private attemptsByAgent;
-  private activeIds;
-  private readonly subscriptions;
-  private captured;
-  private completed;
-  private evicted;
-  private truncatedRecords;
-  private correlationMisses;
-  private correlationMissesByReason;
-  private projectionFailures;
-  private subscriberFailures;
-  private revision;
-  private disposed;
+  private readonly state;
   /**
    * Register the recorder service and its effect-owned waterfall listeners.
    * @param ctx - Cordis context carrying the required DSH services.
@@ -293,7 +278,7 @@ declare class RequestFlightRecorder extends Service {
   subscribe(listener: FlightRecorderListener): () => void;
   /**
    * List retained records from newest to oldest.
-   * @param query - optional session filter.
+   * @param query - optional record filters.
    * @returns a frozen detached array of immutable records.
    */
   list(query?: FlightRecordQuery): readonly FlightRecord[];
@@ -321,12 +306,6 @@ declare class RequestFlightRecorder extends Service {
    * @returns frozen capture, settlement, retention, and failure counters.
    */
   health(): FlightRecorderHealth;
-  private beginRecord;
-  private miss;
-  private applyObservation;
-  private finishRecord;
-  private change;
-  private warnCaptureFailure;
 }
 //#endregion
 export { FLIGHT_LIMITS, FLIGHT_RECORDER_PROTOCOL_VERSION, FLIGHT_RECORD_SCHEMA_VERSION, type FinishedFlightOutcome, type FlightChange, type FlightCounterChange, type FlightCounterField, type FlightDiffResult, type FlightErrorKind, type FlightErrorSummary, type FlightEvidence, type FlightEvidenceKind, type FlightNamedChange, type FlightNamedField, type FlightOutcome, type FlightRecord, type FlightRecordDiff, type FlightRecordOmissions, type FlightRecordQuery, type FlightRecorderCapability, type FlightRecorderChange, type FlightRecorderHealth, type FlightRecorderInfo, type FlightRecorderListener, type FlightRecorderReader, type FlightRecorderSnapshot, type FlightScalarField, type FlightScalarValue, type FlightValueChange, type IncompleteFlightOutcome, type MessageSummary, type PromptAssemblySummary, type PromptContributionSummary, RequestAttemptId, RequestFlightRecorderConfig, type RequestSummary, type RunningFlightOutcome, type ThrewFlightOutcome, type ToolSummary, RequestFlightRecorder as default };
