@@ -3,18 +3,15 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import { Session, SessionId, type SessionId as SessionIdType } from '@deepseek-ai/dsh-session'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import {
-  registerFlightCommand,
-  type FlightDiagnostics,
-} from '../src/command.js'
-import { diffFlightRecords } from '../src/diff.js'
+import { registerFlightCommand } from '../src/command.js'
 import RequestFlightRecorder from '../src/index.js'
+import { RECORDER_INFO } from '../src/recorder-state.js'
 import {
-  RequestAttemptId,
   type FlightRecord,
-  type FlightRecordQuery,
+  type FlightRecorderHealth,
+  type FlightRecorderReader,
 } from '../src/types.js'
 import { flightRecord } from './fixtures.js'
 
@@ -39,53 +36,52 @@ function fakeAgent(ctx: Context, id = 'session-a'): Agent {
   }
 }
 
-function diagnostics(records: readonly FlightRecord[]): FlightDiagnostics {
-  return {
-    list(query: FlightRecordQuery = {}) {
-      const filtered = records.filter(record => (
-        query.sessionId === undefined || record.sessionId === query.sessionId
-      ))
-      return Object.freeze(
-        query.limit === undefined ? filtered : filtered.slice(0, query.limit),
-      )
+function reader(records: readonly FlightRecord[]): {
+  readonly value: FlightRecorderReader
+  readonly snapshotCalls: () => number
+} {
+  let calls = 0
+  const health: FlightRecorderHealth = Object.freeze({
+    captured: records.length,
+    completed: records.filter(record => record.outcome.kind !== 'running').length,
+    active: records.filter(record => record.outcome.kind === 'running').length,
+    retained: records.length,
+    evicted: 0,
+    truncatedRecords: 0,
+    correlationMisses: 0,
+    correlationMissesByReason: {
+      'missing-signal': 0,
+      'missing-pending': 0,
+      'agent-mismatch': 0,
+      'session-mismatch': 0,
     },
-    latest(sessionId?: SessionIdType) {
-      return records.find(record => sessionId === undefined || record.sessionId === sessionId)
-    },
-    health() {
+    projectionFailures: 0,
+    subscriberFailures: 0,
+  })
+  const secondaryRead = (): never => {
+    throw new Error('command performed a secondary recorder read')
+  }
+  const value: FlightRecorderReader = {
+    info: () => RECORDER_INFO,
+    snapshot(query = {}) {
+      calls += 1
       return Object.freeze({
-        captured: records.length,
-        completed: records.filter(record => record.outcome.kind !== 'running').length,
-        active: records.filter(record => record.outcome.kind === 'running').length,
-        retained: records.length,
-        evicted: 0,
-        truncatedRecords: 0,
-        correlationMisses: 0,
-        correlationMissesByReason: {
-          'missing-signal': 0,
-          'missing-pending': 0,
-          'agent-mismatch': 0,
-          'session-mismatch': 0,
-        },
-        projectionFailures: 0,
-        subscriberFailures: 0,
+        info: RECORDER_INFO,
+        revision: calls,
+        health,
+        records: Object.freeze(records.filter(record => (
+          query.sessionId === undefined || record.sessionId === query.sessionId
+        ))),
       })
     },
-    diff(fromId, toId) {
-      const from = records.find(record => record.id === fromId)
-      const to = records.find(record => record.id === toId)
-      if (from === undefined || to === undefined) {
-        return {
-          kind: 'missing',
-          ids: [
-            ...(from === undefined ? [fromId] : []),
-            ...(to === undefined ? [toId] : []),
-          ],
-        }
-      }
-      return { kind: 'ok', diff: diffFlightRecords(from, to) }
-    },
+    subscribe: () => () => {},
+    list: secondaryRead,
+    get: secondaryRead,
+    latest: secondaryRead,
+    diff: secondaryRead,
+    health: secondaryRead,
   }
+  return { value, snapshotCalls: () => calls }
 }
 
 const contexts: Context[] = []
@@ -99,8 +95,9 @@ async function commandWorld(records: readonly FlightRecord[]) {
   contexts.push(ctx)
   await ctx.plugin(CommandRuntime)
   const agent = fakeAgent(ctx)
-  registerFlightCommand(ctx, diagnostics(records))
-  return { ctx, agent }
+  const recorder = reader(records)
+  registerFlightCommand(ctx, recorder.value)
+  return { ctx, agent, snapshotCalls: recorder.snapshotCalls }
 }
 
 describe('optional flight command lifecycle', () => {
@@ -332,28 +329,24 @@ describe('/flight', () => {
     expect(execution?.result.text).not.toContain(otherSession.sessionId)
   })
 
-  it('reports records evicted between prefix resolution and diff rendering', async () => {
-    const ctx = new Context()
-    contexts.push(ctx)
-    await ctx.plugin(CommandRuntime)
-    const agent = fakeAgent(ctx)
-    const recorder = diagnostics([current, previous])
-    registerFlightCommand(ctx, {
-      ...recorder,
-      diff(fromId, toId) {
-        return { kind: 'missing', ids: [fromId, toId] }
-      },
-    })
+  it('reads exactly one atomic Snapshot for every command execution', async () => {
+    const { ctx, agent, snapshotCalls } = await commandWorld([
+      current,
+      previous,
+    ])
+    const signal = new AbortController().signal
 
-    const execution = await ctx.commands.execute(
-      agent,
+    for (const input of [
+      '/flight',
+      '/flight list',
+      '/flight show abcdef',
+      '/flight diff',
       '/flight diff 123456 abcdef',
-      new AbortController().signal,
-    )
-
-    expect(execution?.result).toEqual({
-      kind: 'error',
-      text: 'one or more request records were evicted before diff completed',
-    })
+      '/flight health',
+    ]) {
+      const before = snapshotCalls()
+      await ctx.commands.execute(agent, input, signal)
+      expect(snapshotCalls()).toBe(before + 1)
+    }
   })
 })

@@ -6,6 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { diffFlightRecords } from './diff.js'
 import {
   boundCommandText,
   formatDiff,
@@ -14,20 +15,10 @@ import {
   formatRecordList,
 } from './format.js'
 import type {
-  FlightDiffResult,
   FlightRecord,
-  FlightRecordQuery,
-  FlightRecorderHealth,
-  RequestAttemptId,
+  FlightRecorderReader,
+  FlightRecorderSnapshot,
 } from './types.js'
-
-/** Read-only diagnostics required by the optional command consumer. */
-export interface FlightDiagnostics {
-  list(query?: FlightRecordQuery): readonly FlightRecord[]
-  latest(sessionId?: SessionId): FlightRecord | undefined
-  health(): FlightRecorderHealth
-  diff(fromId: RequestAttemptId, toId: RequestAttemptId): FlightDiffResult
-}
 
 const USAGE = 'usage: /flight [latest|list [limit]|show <id>|diff [from] [to]|health]'
 
@@ -59,107 +50,93 @@ function isCommandResult(
   return 'kind' in value
 }
 
-function latest(
-  recorder: FlightDiagnostics,
-  sessionId: SessionId,
-): CommandResult {
-  const record = recorder.latest(sessionId)
+function latest(records: readonly FlightRecord[]): CommandResult {
+  const record = records[0]
   return record === undefined
     ? error('no retained flight records for this Session')
     : success(formatRecord(record))
 }
 
 function listRecords(
-  recorder: FlightDiagnostics,
-  sessionId: SessionId,
+  records: readonly FlightRecord[],
   limit: number,
 ): CommandResult {
-  const records = recorder.list({ sessionId, limit })
-  return records.length === 0
+  const selected = records.slice(0, limit)
+  return selected.length === 0
     ? error('no retained flight records for this Session')
-    : success(formatRecordList(records))
+    : success(formatRecordList(selected))
 }
 
 function show(
-  recorder: FlightDiagnostics,
-  sessionId: SessionId,
+  records: readonly FlightRecord[],
   prefix: string,
 ): CommandResult {
-  const record = resolvePrefix(recorder.list({ sessionId }), prefix)
+  const record = resolvePrefix(records, prefix)
   return isCommandResult(record) ? record : success(formatRecord(record))
 }
 
 function renderDiff(
-  recorder: FlightDiagnostics,
   from: FlightRecord,
   to: FlightRecord,
 ): CommandResult {
-  const result = recorder.diff(from.id, to.id)
-  if (result.kind === 'missing') {
-    return error('one or more request records were evicted before diff completed')
-  }
-  return success(formatDiff(result.diff))
+  return success(formatDiff(diffFlightRecords(from, to)))
 }
 
-function implicitDiff(
-  recorder: FlightDiagnostics,
-  sessionId: SessionId,
-): CommandResult {
-  const records = recorder.list({ sessionId, limit: 2 })
+function implicitDiff(records: readonly FlightRecord[]): CommandResult {
   if (records.length < 2) {
     return error('diff requires at least two retained flight records for this Session')
   }
-  return renderDiff(recorder, records[1]!, records[0]!)
+  return renderDiff(records[1]!, records[0]!)
 }
 
 function explicitDiff(
-  recorder: FlightDiagnostics,
-  sessionId: SessionId,
+  records: readonly FlightRecord[],
   fromPrefix: string,
   toPrefix: string,
 ): CommandResult {
-  const records = recorder.list({ sessionId })
   const from = resolvePrefix(records, fromPrefix)
   if (isCommandResult(from)) return from
   const to = resolvePrefix(records, toPrefix)
   if (isCommandResult(to)) return to
-  return renderDiff(recorder, from, to)
+  return renderDiff(from, to)
 }
 
 function execute(
-  recorder: FlightDiagnostics,
+  recorder: FlightRecorderReader,
   sessionId: SessionId,
   rawInput: string,
 ): CommandResult {
+  const snapshot: FlightRecorderSnapshot = recorder.snapshot({ sessionId })
+  const records = snapshot.records
   const input = rawInput.trim()
-  if (input === '') return latest(recorder, sessionId)
+  if (input === '') return latest(records)
   const parts = input.split(/\s+/u)
   const [command, ...args] = parts
 
   if (command === 'latest' && args.length === 0) {
-    return latest(recorder, sessionId)
+    return latest(records)
   }
   if (command === 'list' && args.length === 0) {
-    return listRecords(recorder, sessionId, 10)
+    return listRecords(records, 10)
   }
   if (command === 'list' && args.length === 1) {
     const limit = Number(args[0])
     if (Number.isSafeInteger(limit) && limit >= 1 && limit <= 20) {
-      return listRecords(recorder, sessionId, limit)
+      return listRecords(records, limit)
     }
     return error(USAGE)
   }
   if (command === 'health' && args.length === 0) {
-    return success(formatHealth(recorder.health()))
+    return success(formatHealth(snapshot.health))
   }
   if (command === 'show' && args.length === 1) {
-    return show(recorder, sessionId, args[0]!)
+    return show(records, args[0]!)
   }
   if (command === 'diff' && args.length === 0) {
-    return implicitDiff(recorder, sessionId)
+    return implicitDiff(records)
   }
   if (command === 'diff' && args.length === 2) {
-    return explicitDiff(recorder, sessionId, args[0]!, args[1]!)
+    return explicitDiff(records, args[0]!, args[1]!)
   }
   return error(USAGE)
 }
@@ -167,11 +144,11 @@ function execute(
 /**
  * Register `/flight` through the official human-command registry.
  * @param ctx - optional command-injected Cordis child context.
- * @param recorder - read-only flight diagnostics service.
+ * @param recorder - stable read-only flight recorder.
  */
 export function registerFlightCommand(
   ctx: Context,
-  recorder: FlightDiagnostics,
+  recorder: FlightRecorderReader,
 ): void {
   ctx.commands.register({
     name: 'flight',

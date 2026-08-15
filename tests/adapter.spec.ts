@@ -118,7 +118,7 @@ describe('registerHarnessAdapter', () => {
       kind: 'finished',
       finish: {
         kind: 'error',
-        failure: { message: 'TOP_SECRET' },
+        failure: { message: 'TOP_SECRET', code: 'TOP_SECRET_CODE' },
       },
       totalMs: 10,
     })).toEqual({
@@ -130,7 +130,7 @@ describe('registerHarnessAdapter', () => {
       kind: 'finished',
       finish: {
         kind: 'aborted',
-        failure: { message: 'TOP_SECRET' },
+        failure: { message: 'TOP_SECRET', code: 'TOP_SECRET_CODE' },
       },
       firstChunkMs: 2,
       totalMs: 10,
