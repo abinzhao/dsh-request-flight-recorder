@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.19.0, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:coverage
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: git diff --exit-code -- lib
+      - run: pnpm exec publint
+      - run: mkdir -p .artifacts && pnpm pack --pack-destination .artifacts
+        if: matrix.node == '22.19.0'
+      - run: node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+        if: matrix.node == '22.19.0'

@@ -1,0 +1,5 @@
+- insert:
+    - id: request-flight-recorder
+      name: dsh-request-flight-recorder
+      config:
+        capacity: 128

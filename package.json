@@ -1,0 +1,114 @@
+{
+  "name": "dsh-request-flight-recorder",
+  "version": "1.0.0",
+  "description": "Content-free request and stream diagnostics for DeepSeek Harness",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "types": "./lib/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./invariant": {
+      "types": "./lib/invariant.d.mts",
+      "default": "./lib/invariant.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.mjs",
+    "lib/invariant.mjs",
+    "lib/index.d.mts",
+    "lib/invariant.d.mts",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "docs/api.md",
+    "docs/data-schema.md",
+    "docs/privacy-threat-model.md",
+    "docs/architecture.md",
+    "docs/compatibility.md",
+    "docs/migration.md",
+    "docs/benchmarks.md",
+    "examples/read-only-consumer.ts",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "bench": "vitest bench --run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "build": "tsdown",
+    "prepack": "pnpm build",
+    "smoke:packed": "node scripts/smoke-packed.mjs",
+    "check": "pnpm test:coverage && pnpm typecheck && pnpm build && publint"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "diagnostics",
+    "observability",
+    "debugging",
+    "llm",
+    "developer-tools"
+  ],
+  "author": "abinzhao",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abinzhao/dsh-request-flight-recorder.git"
+  },
+  "homepage": "https://github.com/abinzhao/dsh-request-flight-recorder#readme",
+  "bugs": {
+    "url": "https://github.com/abinzhao/dsh-request-flight-recorder/issues"
+  },
+  "engines": {
+    "node": "^22.19.0 || ^24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-brand": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-commands": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "0.1.0-rc.6"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-brand": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-commands": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "0.1.0-rc.6",
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "^22.19.0",
+    "@vitest/coverage-v8": "^4.1.0",
+    "js-yaml": "4.2.0",
+    "publint": "^0.3.15",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.0",
+    "vitest": "^4.1.0"
+  }
+}
