@@ -28,6 +28,16 @@ Version `1.0.0` targets DeepSeek Harness `0.1.0-rc.6`, Cordis `^4.0.1`, and
 Node.js `^22.19.0 || ^24.0.0`. DSH release candidates may change extension
 contracts; use the matching plugin version.
 
+The declared RC is a blocking CI target. New npm `latest` or `next` RCs are
+checked daily as observational candidates; a passing observation does not
+widen peer ranges or publish a release. Maintainers can reproduce both gates:
+
+```sh
+pnpm pack --pack-destination .artifacts
+pnpm verify:dsh-profile .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+pnpm verify:dsh-candidate 0.1.0-rc.6
+```
+
 ## Installation
 
 ### npm

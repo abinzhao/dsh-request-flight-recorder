@@ -371,6 +371,31 @@ describe('public documentation contract', () => {
     expect(example).toContain('.subscribe(')
   })
 
+  it('documents blocking and observational DSH compatibility automation', async () => {
+    const english = await readProjectFile('README.md')
+    const chinese = await readProjectFile('README.zh-CN.md')
+    const compatibility = await readProjectFile('docs/compatibility.md')
+
+    for (const document of [english, chinese, compatibility]) {
+      expect(document).toContain('verify:dsh-profile')
+      expect(document).toContain('verify:dsh-candidate')
+      expect(document).toMatch(/blocking|阻断/iu)
+      expect(document).toMatch(/observational|观察/iu)
+    }
+    for (const layer of [
+      'install',
+      'typecheck',
+      'compose',
+      'boot',
+      'Agent Loop',
+      'command',
+      'privacy',
+      'cleanup',
+    ]) {
+      expect(compatibility).toContain(layer)
+    }
+  })
+
   it('keeps release history for v1, v0.2, and v0.1', async () => {
     const changelog = await readProjectFile('CHANGELOG.md')
 

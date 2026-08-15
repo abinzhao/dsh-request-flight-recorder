@@ -29,6 +29,35 @@ this repository's compatibility matrix. Do not widen peer ranges without:
 4. packing and loading a fresh consumer;
 5. installing through the official DSH plugin command and dumping the profile.
 
+## Automated gates
+
+The exact declared RC is blocking. CI compiles and tests on Node 22.19 and 24,
+then packs the artifact and runs two Node 22.19 distribution checks:
+
+```sh
+pnpm smoke:packed .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+pnpm verify:dsh-profile .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+```
+
+The Profile gate installs the tarball through the exact public DSH CLI in an
+isolated `DSH_HOME`, verifies one composed Bundle row, boots Web on an
+ephemeral port, requires HTTP 200, terminates the real CLI with `SIGTERM`, and
+removes its generated Home and CLI installation.
+
+The daily `latest` and `next` check is observational. Each new RC is tested in
+a temporary repository copy:
+
+```sh
+pnpm verify:dsh-candidate 0.1.0-rc.6
+```
+
+The candidate gate reports the first failed layer as `install`, `test`,
+`typecheck`, `build`, `publint`, `pack`, or `smoke`. Together with the Profile
+and real request checks, compatibility evidence is grouped as install,
+typecheck, compose, boot, Agent Loop, command, privacy, and cleanup. A passing
+observation does not edit package metadata, create a commit, widen a Peer
+range, or publish a release.
+
 ## Installation surfaces
 
 The package Bundle patch inserts `dsh-request-flight-recorder` with capacity

@@ -24,6 +24,16 @@ Agent Loop 请求，关联请求组装与流式结束状态，并在有界内存
 Node.js `^22.19.0 || ^24.0.0`。DSH RC 版本可能修改扩展契约，请使用与目标
 DSH 版本匹配的插件版本。
 
+当前声明的 RC 是 CI 阻断目标。npm 新出现的 `latest` 或 `next` RC 每日
+作为观察候选运行；观察通过不会自动扩大 Peer 范围或发布版本。维护者可
+复现两类门禁：
+
+```sh
+pnpm pack --pack-destination .artifacts
+pnpm verify:dsh-profile .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+pnpm verify:dsh-candidate 0.1.0-rc.6
+```
+
 ## 安装
 
 ### npm
