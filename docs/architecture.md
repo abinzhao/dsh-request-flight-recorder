@@ -32,6 +32,19 @@ The Command module consumes one atomic Snapshot for the invoking Session.
 Prefix resolution, list limits, health rendering, and Diff therefore observe
 one revision and cannot race a second Reader call.
 
+Filters, Explain, and Stats are pure projections of that same Snapshot. Stats
+describes the retained Session window only. The Command module reads the Host
+`locale.preference` for each execution, while description and hint metadata use
+the locale captured when Commands registers.
+
+## Minimal Client Half
+
+The Web Client Half binds only the standard locale Settings namespace. On the
+first non-loading Host snapshot, it writes the provisional browser `zh` or `en`
+only when no explicit preference exists. It cannot access the recorder Service,
+Sessions, or flight records. Client failure does not affect Host capture or
+commands.
+
 ## Correlation
 
 Only requests with the official Agent Loop marker are candidates. Correlation

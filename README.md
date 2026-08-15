@@ -24,7 +24,7 @@ provider. It does not change Agent Loop or prompt semantics.
 
 ## Compatibility
 
-Version `1.0.0` targets DeepSeek Harness `0.1.0-rc.6`, Cordis `^4.0.1`, and
+Version `1.1.0` targets DeepSeek Harness `0.1.0-rc.6`, Cordis `^4.0.1`, and
 Node.js `^22.19.0 || ^24.0.0`. DSH release candidates may change extension
 contracts; use the matching plugin version.
 
@@ -34,7 +34,8 @@ widen peer ranges or publish a release. Maintainers can reproduce both gates:
 
 ```sh
 pnpm pack --pack-destination .artifacts
-pnpm verify:dsh-profile .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+pnpm verify:dsh-profile .artifacts/dsh-request-flight-recorder-1.1.0.tgz
+pnpm verify:dsh-locale .artifacts/dsh-request-flight-recorder-1.1.0.tgz
 pnpm verify:dsh-candidate 0.1.0-rc.6
 ```
 
@@ -70,7 +71,7 @@ To install a packed artifact instead:
 
 ```sh
 pnpm pack
-dsh plugin --profile web add ./dsh-request-flight-recorder-1.0.0.tgz
+dsh plugin --profile web add ./dsh-request-flight-recorder-1.1.0.tgz
 ```
 
 Verify the composed profile:
@@ -88,10 +89,13 @@ adds this default:
       name: dsh-request-flight-recorder
       config:
         capacity: 128
+        slowFirstChunkMs: 1000
+        slowTotalMs: 2000
 ```
 
-`capacity` must be a positive safe integer. It limits retained records in the
-current process; health counters are tracked independently of eviction.
+All three values must be positive safe integers. `capacity` limits retained
+records in the current process; `slowFirstChunkMs` and `slowTotalMs` classify
+requests for diagnostics without changing request execution.
 
 ## Human command
 
@@ -102,10 +106,15 @@ When the active profile includes the official Commands service:
 /flight latest
 /flight list
 /flight list 20
+/flight list failed [limit]
+/flight list slow [limit]
+/flight list truncated [limit]
 /flight show <request-id-prefix>
 /flight diff
 /flight diff <from-prefix> <to-prefix>
 /flight health
+/flight explain <request-id-prefix>
+/flight stats
 ```
 
 `/flight` and `/flight latest` show the newest retained record for the current
@@ -113,6 +122,23 @@ Session. `/flight list` defaults to 10 rows; an explicit limit must be from 1
 through 20. An implicit diff compares the two newest records. IDs are resolved
 as unique prefixes within the current Session; missing or ambiguous prefixes
 fail closed. Output is plain text and limited to 4,096 UTF-16 code units.
+
+`failed` includes threw and incomplete outcomes. `slow` uses
+`slowFirstChunkMs = 1000` or `slowTotalMs = 2000`, inclusive. `truncated`
+selects records with positive omission counters. Explain reports finite
+observations and checks without claiming a root cause. Stats covers only the
+retained Session window, not process history: success ratio is
+`finished / terminal`, running records are excluded from that denominator, and
+P95 uses nearest-rank calculation.
+
+## Language behavior
+
+Command output supports `zh` and `en` and reads the current Host
+`locale.preference` on every execution, so a language change applies to the
+next command. Static command descriptions and hints are registered at startup
+and change after the Profile restarts. Unknown languages fallback to Chinese.
+A minimal Web Client Half synchronizes the first browser language only when no
+explicit Host preference exists; it never overwrites an explicit preference.
 
 Representative output:
 
@@ -200,6 +226,9 @@ Node.js process as other profile plugins and is not a security boundary.
 No records are written to disk by the recorder. The bounded Ring Buffer is
 cleared on process exit, HMR disposal, or service disposal. This does not
 override persistence performed by the Commands or session/history services.
+The only plugin-owned persisted preference is the standard
+`locale.preference`; the Web Client Half cannot access Sessions or flight
+records.
 
 ## Correlation and stream behavior
 

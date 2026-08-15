@@ -20,7 +20,7 @@ Agent Loop 请求，关联请求组装与流式结束状态，并在有界内存
 
 ## 兼容性
 
-版本 `1.0.0` 面向 DeepSeek Harness `0.1.0-rc.6`、Cordis `^4.0.1` 和
+版本 `1.1.0` 面向 DeepSeek Harness `0.1.0-rc.6`、Cordis `^4.0.1` 和
 Node.js `^22.19.0 || ^24.0.0`。DSH RC 版本可能修改扩展契约，请使用与目标
 DSH 版本匹配的插件版本。
 
@@ -30,7 +30,8 @@ DSH 版本匹配的插件版本。
 
 ```sh
 pnpm pack --pack-destination .artifacts
-pnpm verify:dsh-profile .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+pnpm verify:dsh-profile .artifacts/dsh-request-flight-recorder-1.1.0.tgz
+pnpm verify:dsh-locale .artifacts/dsh-request-flight-recorder-1.1.0.tgz
 pnpm verify:dsh-candidate 0.1.0-rc.6
 ```
 
@@ -64,7 +65,7 @@ dsh plugin --profile web add .
 
 ```sh
 pnpm pack
-dsh plugin --profile web add ./dsh-request-flight-recorder-1.0.0.tgz
+dsh plugin --profile web add ./dsh-request-flight-recorder-1.1.0.tgz
 ```
 
 验证 Profile 合成结果：
@@ -81,10 +82,12 @@ dsh --profile web --dump-config
       name: dsh-request-flight-recorder
       config:
         capacity: 128
+        slowFirstChunkMs: 1000
+        slowTotalMs: 2000
 ```
 
-`capacity` 必须是正安全整数，用于限制当前进程保留的记录数量。健康计数独立于
-记录淘汰，不会随 Ring Buffer 淘汰而回退。
+三个值都必须是正安全整数。`capacity` 限制当前进程保留的记录数量；
+`slowFirstChunkMs` 和 `slowTotalMs` 仅用于诊断分类，不会改变请求执行。
 
 ## 人类命令
 
@@ -95,16 +98,34 @@ dsh --profile web --dump-config
 /flight latest
 /flight list
 /flight list 20
+/flight list failed [limit]
+/flight list slow [limit]
+/flight list truncated [limit]
 /flight show <request-id-prefix>
 /flight diff
 /flight diff <from-prefix> <to-prefix>
 /flight health
+/flight explain <request-id-prefix>
+/flight stats
 ```
 
 `/flight` 和 `/flight latest` 显示当前 Session 最新的保留记录；`/flight list`
 默认返回 10 行，显式上限必须在 1 到 20 之间。无参数 Diff 比较最新两条记录。
 ID 仅在当前 Session 内按唯一前缀解析；缺失或存在歧义时会拒绝查询。输出为
 纯文本，最多 4,096 个 UTF-16 code unit。
+
+`failed` 包含 threw 和 incomplete；`slow` 使用包含边界的
+`slowFirstChunkMs = 1000` 或 `slowTotalMs = 2000`；`truncated` 选择存在
+正 omissions 计数的记录。Explain 只陈述有限事实和检查建议，不宣称根因。
+Stats 仅覆盖当前 Session 的保留窗口，不代表进程历史：成功率为
+`finished / terminal`，running 不进入分母，P95 使用 nearest-rank 算法。
+
+## 语言行为
+
+命令输出支持 `zh` 和 `en`，每次执行都会读取当前 Host
+`locale.preference`，因此语言切换会在下一条命令立即生效。静态命令描述和
+提示在启动时注册，需要重启 Profile 后更新。未知语言回退中文。最小 Web
+Client Half 仅在不存在显式 Host 偏好时同步首次浏览器语言，不会覆盖已有偏好。
 
 示例输出：
 
@@ -187,6 +208,8 @@ Stack、Cause、自定义 Error 名称或非 Error 抛出值，只保存有限�
 记录器自身不会将记录写入磁盘。有界 Ring Buffer 会在进程退出、HMR Dispose
 或 Service Dispose 时清空。这不会阻止 Commands 或 Session/历史服务执行其
 自身的持久化。
+插件自身唯一持久化的是标准 `locale.preference`；Web Client Half 无法访问
+Session 或飞行记录。
 
 ## 关联与流式行为
 

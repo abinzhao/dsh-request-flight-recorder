@@ -4,6 +4,25 @@ All notable changes are recorded here following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). A version entry does
 not by itself indicate that the package has been published to npm.
 
+## [1.1.0] - 2026-08-16
+
+### Added
+
+- Blocking supported-RC Profile verification and observational checks for new
+  DSH release candidates.
+- Chinese and English command output, first-browser locale synchronization,
+  filtered lists, deterministic Explain facts, and retained-window Stats.
+- Configurable `slowFirstChunkMs` and `slowTotalMs` diagnostic thresholds.
+
+### Changed
+
+- Recorder State and Harness Adapter now own explicit transactional and event
+  translation boundaries.
+- Every command derives its result from one Session-scoped atomic Snapshot.
+- Provider error and aborted finishes are normalized to privacy-safe finite
+  failure outcomes.
+- Reader protocol and record schema remain version `1`.
+
 ## [1.0.0] - 2026-08-16
 
 ### Added

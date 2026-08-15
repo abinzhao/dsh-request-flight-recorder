@@ -10,7 +10,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +34,11 @@ jobs:
       - run: pnpm exec publint
       - run: mkdir -p .artifacts && pnpm pack --pack-destination .artifacts
         if: matrix.node == '22.19.0'
-      - run: node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+      - run: node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.1.0.tgz
         if: matrix.node == '22.19.0'
-      - run: node scripts/verify-dsh-profile.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+      - run: node scripts/verify-dsh-profile.mjs .artifacts/dsh-request-flight-recorder-1.1.0.tgz
+        if: matrix.node == '22.19.0'
+      - run: pnpm exec playwright install --with-deps chromium
+        if: matrix.node == '22.19.0'
+      - run: node scripts/verify-dsh-locale.mjs .artifacts/dsh-request-flight-recorder-1.1.0.tgz
         if: matrix.node == '22.19.0'

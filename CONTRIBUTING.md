@@ -50,7 +50,7 @@ For release-facing changes, also run:
 pnpm exec vitest run tests/soak.spec.ts
 pnpm bench
 pnpm pack --pack-destination .artifacts
-node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.1.0.tgz
 ```
 
 Review changes to `FlightRecorderReader`, protocol/schema constants, records,

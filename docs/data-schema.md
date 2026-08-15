@@ -29,7 +29,9 @@ tool, and variable names plus character counts where applicable.
 
 Outcomes are `running`, `finished`, `threw`, or `incomplete`. A thrown outcome
 contains only a finite `FlightErrorSummary.kind`; it never contains arbitrary
-error text.
+error text. Provider `error` and `aborted` finish reasons are normalized to a
+`threw` outcome with `error.kind = "error"` so the provider failure object
+cannot enter the record.
 
 Evidence sources are `system-prompt/assemble`, `agent/request`, and
 `llm/stream`. Evidence labels describe whether retained facts were exact,

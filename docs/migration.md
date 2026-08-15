@@ -1,4 +1,17 @@
-# Migration from 0.2 to 1.0
+# Migration
+
+## From 1.0 to 1.1
+
+Version 1.1 keeps `FLIGHT_RECORDER_PROTOCOL_VERSION` and
+`FLIGHT_RECORD_SCHEMA_VERSION` at `1`; existing `FlightRecorderReader`
+consumers require no data migration.
+
+Bundle configuration adds `slowFirstChunkMs: 1000` and `slowTotalMs: 2000`.
+Existing configurations inherit these defaults. `/flight` adds failed, slow,
+and truncated list filters, Explain, and retained-window Stats. Output follows
+Host `zh` or `en`; unknown languages fall back to Chinese.
+
+## From 0.2 to 1.0
 
 Version 1.0 preserves the default plugin export, Bundle configuration,
 `capacity`, existing query methods, diff semantics, and optional `/flight`

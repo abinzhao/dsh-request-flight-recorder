@@ -43,6 +43,14 @@ Reader consumers run with process-local access. Subscription callbacks receive
 only a revision invalidation and must call `snapshot()` to read current state.
 The recorder itself does not write records to disk or send them over a network.
 
+## Language preference
+
+The minimal Web Client Half may persist the standard Host
+`locale.preference` when no explicit preference exists. This language code is
+separate from process-local diagnostics. The Client Half cannot access Sessions
+or flight records, and it does not import the Host recorder implementation.
+An explicit preference is preserved.
+
 ## Resource controls
 
 The Ring Buffer defaults to 128 records. Every structural collection and tool

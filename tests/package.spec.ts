@@ -31,7 +31,13 @@ interface PackageManifest {
     readonly bundle: {
       readonly patch: string
     }
+    readonly client: {
+      readonly inject: readonly string[]
+      readonly platform: string
+      readonly immediately: boolean
+    }
   }
+  readonly exports: Readonly<Record<string, unknown>>
   readonly scripts: Readonly<Record<string, string>>
   readonly files: readonly string[]
   readonly peerDependencies: Readonly<Record<string, string>>
@@ -51,7 +57,7 @@ describe('package contract', () => {
   it('publishes the exact v1 repository metadata', async () => {
     const manifest = await readManifest()
 
-    expect(manifest.version).toBe('1.0.0')
+    expect(manifest.version).toBe('1.1.0')
     expect(manifest.repository).toEqual({
       type: 'git',
       url: 'git+https://github.com/abinzhao/dsh-request-flight-recorder.git',
@@ -96,6 +102,8 @@ describe('package contract', () => {
             name: 'dsh-request-flight-recorder',
             config: {
               capacity: 128,
+              slowFirstChunkMs: 1000,
+              slowTotalMs: 2000,
             },
           },
         ],
@@ -111,8 +119,10 @@ describe('package contract', () => {
     expect(manifest.files).toEqual([
       'lib/index.mjs',
       'lib/invariant.mjs',
+      'lib/client.cjs',
       'lib/index.d.mts',
       'lib/invariant.d.mts',
+      'lib/client.d.cts',
       'cordis.patch.yml',
       'README.md',
       'README.zh-CN.md',
@@ -128,6 +138,38 @@ describe('package contract', () => {
       'examples/read-only-consumer.ts',
       'LICENSE',
     ])
+  })
+
+  it('ships one Web-only Client Half for initial locale synchronization', async () => {
+    const manifest = await readManifest()
+    const build = await readProjectFile('tsdown.config.ts')
+
+    expect(manifest.exports['./client']).toEqual({
+      types: './lib/client.d.cts',
+      default: './lib/client.cjs',
+    })
+    expect(manifest.files).toContain('lib/client.cjs')
+    expect(manifest.files).toContain('lib/client.d.cts')
+    expect(manifest.dsh.client).toEqual({
+      inject: [
+        '@deepseek-ai/dsh-api-remotes',
+        '@deepseek-ai/dsh-client-connection',
+        '@deepseek-ai/dsh-client-runtime',
+        '@deepseek-ai/dsh-client-ui-settings',
+        '@deepseek-ai/dsh-client-locale',
+      ],
+      platform: 'web',
+      immediately: true,
+    })
+    for (const dependency of manifest.dsh.client.inject) {
+      expect(manifest.peerDependencies[dependency]).toBe('0.1.0-rc.6')
+    }
+    expect(build).toContain("client: 'src/client/index.ts'")
+    const client = await readProjectFile('lib/client.cjs')
+    expect(client).toContain('window.__ModuleLoader__.load({')
+    expect(client).toContain('id: "dsh-request-flight-recorder"')
+    expect(client).toContain('return module.exports')
+    expect(client).not.toMatch(/^export /mu)
   })
 
   it('keeps generated library output visible to Git', async () => {
@@ -211,6 +253,27 @@ describe('distribution automation contract', () => {
     }
   })
 
+  it('defines an isolated browser locale synchronization gate', async () => {
+    const manifest = await readManifest()
+
+    expect(manifest.scripts['verify:dsh-locale']).toBe(
+      'node scripts/verify-dsh-locale.mjs',
+    )
+    const script = await readProjectFile('scripts/verify-dsh-locale.mjs')
+    for (const token of [
+      'chromium',
+      'newContext',
+      'locale',
+      'DSH_HOME',
+      'settings.yaml',
+      'preference',
+      'SIGTERM',
+      'rm(',
+    ]) {
+      expect(script).toContain(token)
+    }
+  })
+
   it('defines a non-mutating candidate RC verifier with strict arguments', async () => {
     const manifest = await readManifest()
     const script = fileURLToPath(
@@ -247,8 +310,10 @@ describe('distribution automation contract', () => {
       'git diff --exit-code -- lib',
       'pnpm exec publint',
       'mkdir -p .artifacts && pnpm pack --pack-destination .artifacts',
-        'node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz',
-        'node scripts/verify-dsh-profile.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz',
+        'node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.1.0.tgz',
+        'node scripts/verify-dsh-profile.mjs .artifacts/dsh-request-flight-recorder-1.1.0.tgz',
+        'pnpm exec playwright install --with-deps chromium',
+        'node scripts/verify-dsh-locale.mjs .artifacts/dsh-request-flight-recorder-1.1.0.tgz',
     ]) {
       expect(workflow).toContain(command)
     }
@@ -301,11 +366,34 @@ describe('public documentation contract', () => {
 
       expect(readme).not.toContain('dsh plugins install')
       expect(readme).toContain('0.1.0-rc.6')
-      expect(readme).toContain('1.0.0')
+      expect(readme).toContain('1.1.0')
       expect(readme).toContain('^22.19.0 || ^24.0.0')
       expect(readme).toContain(alternateLanguage)
       expect(readme).toContain('/flight list')
       expect(readme).toContain('/flight list 20')
+      for (const command of [
+        '/flight list failed',
+        '/flight list slow',
+        '/flight list truncated',
+        '/flight explain <',
+        '/flight stats',
+      ]) {
+        expect(readme).toContain(command)
+      }
+      for (const token of [
+        'slowFirstChunkMs',
+        'slowTotalMs',
+        'zh',
+        'en',
+        '1000',
+        '2000',
+      ]) {
+        expect(readme).toContain(token)
+      }
+      expect(readme).toMatch(/next command|下一条命令/iu)
+      expect(readme).toMatch(/restart|重启/iu)
+      expect(readme).toMatch(/browser|浏览器/iu)
+      expect(readme).toMatch(/fallback|回退/iu)
       expect(readme).toContain('FLIGHT_RECORDER_PROTOCOL_VERSION')
       expect(readme).toContain('FLIGHT_RECORD_SCHEMA_VERSION')
       expect(readme).toContain('snapshot()')
@@ -357,6 +445,11 @@ describe('public documentation contract', () => {
     expect(schema).toContain('omissions')
     expect(privacy).toContain('error message')
     expect(privacy).toContain('non-error-thrown')
+    expect(privacy).toContain('locale.preference')
+    expect(privacy).toMatch(/Client Half/iu)
+    expect(privacy).toMatch(
+      /cannot access Sessions\s+or flight records|无法访问 Session 或飞行记录/iu,
+    )
     expect(architecture).toContain('registerHarnessAdapter')
     expect(architecture).toContain('setImmediate')
     expect(compatibility).toContain('0.1.0-rc.6')
@@ -410,9 +503,10 @@ describe('public documentation contract', () => {
     }
   })
 
-  it('keeps release history for v1, v0.2, and v0.1', async () => {
+  it('keeps release history for v1.1, v1, v0.2, and v0.1', async () => {
     const changelog = await readProjectFile('CHANGELOG.md')
 
+    expect(changelog).toContain('## [1.1.0]')
     expect(changelog).toContain('## [1.0.0]')
     expect(changelog).toContain('## [0.2.0]')
     expect(changelog).toContain('## [0.1.0]')

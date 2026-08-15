@@ -131,6 +131,28 @@ afterEach(async () => {
 })
 
 describe('RequestFlightRecorder', () => {
+  it('validates positive safe-integer diagnostic thresholds with stable defaults', () => {
+    expect(RequestFlightRecorder.Config({ capacity: 8 })).toEqual({
+      capacity: 8,
+      slowFirstChunkMs: 1_000,
+      slowTotalMs: 2_000,
+    })
+
+    for (const value of [
+      0,
+      -1,
+      1.5,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      expect(() => RequestFlightRecorder.Config({
+        capacity: 8,
+        slowFirstChunkMs: value,
+        slowTotalMs: value,
+      })).toThrow()
+    }
+  })
+
   it('reports a frozen stable protocol and capability handshake', async () => {
     const world = await createWorld()
     const recorder = world.recorder as RequestFlightRecorder & {

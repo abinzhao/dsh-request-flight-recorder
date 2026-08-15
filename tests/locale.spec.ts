@@ -71,5 +71,8 @@ describe('flight locale contract', () => {
     expect(FLIGHT_MESSAGES.en.description).toBe(
       'Inspect content-free model request diagnostics',
     )
+    expect(FLIGHT_MESSAGES.zh.recordTitle('abc')).toBe('飞行记录 abc')
+    expect(FLIGHT_MESSAGES.zh.notFound('abc')).toContain('“abc”')
+    expect(FLIGHT_MESSAGES.zh.ambiguous('abc')).toContain('“abc”')
   })
 })

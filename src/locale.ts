@@ -32,6 +32,7 @@ export interface FlightMessages {
   readonly unavailable: string
   readonly noRecords: string
   readonly diffNeedsTwo: string
+  readonly noStructuralChanges: string
   readonly recordTitle: (id: string) => string
   readonly notFound: (prefix: string) => string
   readonly ambiguous: (prefix: string) => string
@@ -78,6 +79,7 @@ export interface FlightMessages {
   readonly incomplete: Readonly<Record<IncompleteReason, string>>
   readonly errors: Readonly<Record<FlightErrorKind, string>>
   readonly correlation: Readonly<Record<CorrelationMissReason, string>>
+  readonly namedChanges: Readonly<Record<'added' | 'removed' | 'changed', string>>
   readonly facts: {
     readonly running: string
     readonly incomplete: string
@@ -88,6 +90,11 @@ export interface FlightMessages {
     readonly slowTotal: string
     readonly missingPromptAssembly: string
     readonly noAnomaly: string
+  }
+  readonly suggestions: {
+    readonly title: string
+    readonly compare: string
+    readonly inspectLifecycle: string
   }
   readonly retainedWindow: string
   readonly messages: (count: number) => string
@@ -104,6 +111,7 @@ const zhMessages: FlightMessages = {
   unavailable: '不可用',
   noRecords: '当前 Session 没有保留的飞行记录',
   diffNeedsTwo: 'Diff 至少需要当前 Session 中的两条保留记录',
+  noStructuralChanges: '没有结构变化',
   recordTitle: id => `飞行记录 ${id}`,
   notFound: prefix => `当前 Session 中未找到请求 ID 前缀“${prefix}”`,
   ambiguous: prefix => `当前 Session 中的请求 ID 前缀“${prefix}”不唯一`,
@@ -182,6 +190,11 @@ const zhMessages: FlightMessages = {
     'agent-mismatch': 'Agent 不匹配',
     'session-mismatch': 'Session 不匹配',
   },
+  namedChanges: {
+    added: '新增',
+    removed: '移除',
+    changed: '变更',
+  },
   facts: {
     running: '请求仍在进行中',
     incomplete: '流未完整结束',
@@ -192,6 +205,11 @@ const zhMessages: FlightMessages = {
     slowTotal: '总耗时达到慢请求阈值',
     missingPromptAssembly: '没有 Prompt Assembly 证据',
     noAnomaly: '未发现已知异常',
+  },
+  suggestions: {
+    title: '建议检查',
+    compare: '与相邻请求的结构差异进行比较',
+    inspectLifecycle: '检查请求消费者与流生命周期',
   },
   retainedWindow: '当前 Session 保留窗口',
   messages: count => `${count} 条消息`,
@@ -208,6 +226,7 @@ const enMessages: FlightMessages = {
   unavailable: 'unavailable',
   noRecords: 'no retained flight records for this Session',
   diffNeedsTwo: 'diff requires at least two retained flight records for this Session',
+  noStructuralChanges: 'no structural changes',
   recordTitle: id => `flight ${id}`,
   notFound: prefix => `request id prefix "${prefix}" was not found in this Session`,
   ambiguous: prefix => `request id prefix "${prefix}" is ambiguous in this Session`,
@@ -286,6 +305,11 @@ const enMessages: FlightMessages = {
     'agent-mismatch': 'agent mismatch',
     'session-mismatch': 'session mismatch',
   },
+  namedChanges: {
+    added: 'added',
+    removed: 'removed',
+    changed: 'changed',
+  },
   facts: {
     running: 'request is still running',
     incomplete: 'stream did not finish completely',
@@ -296,6 +320,11 @@ const enMessages: FlightMessages = {
     slowTotal: 'total duration reached the slow threshold',
     missingPromptAssembly: 'prompt assembly evidence is absent',
     noAnomaly: 'no known anomaly was found',
+  },
+  suggestions: {
+    title: 'checks',
+    compare: 'compare structural differences with adjacent requests',
+    inspectLifecycle: 'inspect the request consumer and stream lifecycle',
   },
   retainedWindow: 'retained window for this Session',
   messages: count => `${count} message${count === 1 ? '' : 's'}`,

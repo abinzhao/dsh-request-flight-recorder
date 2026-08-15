@@ -1,6 +1,7 @@
 # Public API
 
-Version 1.0.0 exposes a read-only, process-local API from the package root.
+Version 1.1.0 exposes the same version-1 read-only, process-local API from the
+package root.
 Internal stores, projectors, adapters, formatters, and subscription coordinators
 are not public.
 
@@ -83,3 +84,10 @@ Records, arrays, snapshots, health objects, reason maps, and diff results are
 frozen. The service provides no mutation, raw-body retrieval, export, or
 persistence API. Retained state and listeners are cleared when its Cordis
 service lifetime ends.
+
+## Diagnostic configuration
+
+`capacity`, `slowFirstChunkMs`, and `slowTotalMs` are positive safe integers.
+Defaults are 128, 1000, and 2000 respectively. Thresholds affect only
+`/flight list slow` and Explain classification; they do not change capture,
+retention, protocol version, record schema, or model requests.

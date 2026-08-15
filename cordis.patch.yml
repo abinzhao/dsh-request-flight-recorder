@@ -3,3 +3,5 @@
       name: dsh-request-flight-recorder
       config:
         capacity: 128
+        slowFirstChunkMs: 1000
+        slowTotalMs: 2000

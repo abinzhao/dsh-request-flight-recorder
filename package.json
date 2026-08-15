@@ -1,6 +1,6 @@
 {
   "name": "dsh-request-flight-recorder",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Content-free request and stream diagnostics for DeepSeek Harness",
   "type": "module",
   "main": "./lib/index.mjs",
@@ -14,13 +14,19 @@
       "types": "./lib/invariant.d.mts",
       "default": "./lib/invariant.mjs"
     },
+    "./client": {
+      "types": "./lib/client.d.cts",
+      "default": "./lib/client.cjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.mjs",
     "lib/invariant.mjs",
+    "lib/client.cjs",
     "lib/index.d.mts",
     "lib/invariant.d.mts",
+    "lib/client.d.cts",
     "cordis.patch.yml",
     "README.md",
     "README.zh-CN.md",
@@ -40,6 +46,17 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web",
+      "immediately": true
     }
   },
   "scripts": {
@@ -52,6 +69,7 @@
     "smoke:packed": "node scripts/smoke-packed.mjs",
     "verify:dsh-candidate": "node scripts/verify-dsh-candidate.mjs",
     "verify:dsh-profile": "node scripts/verify-dsh-profile.mjs",
+    "verify:dsh-locale": "node scripts/verify-dsh-locale.mjs",
     "check": "pnpm test:coverage && pnpm typecheck && pnpm build && publint"
   },
   "keywords": [
@@ -85,7 +103,12 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-api-remotes": "0.1.0-rc.6",
     "@deepseek-ai/dsh-brand": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-connection": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-locale": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-settings": "0.1.0-rc.6",
     "@deepseek-ai/dsh-commands": "0.1.0-rc.6",
     "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
     "@deepseek-ai/dsh-llm": "0.1.0-rc.6",
@@ -120,6 +143,7 @@
     "@types/node": "^22.19.0",
     "@vitest/coverage-v8": "^4.1.0",
     "js-yaml": "4.2.0",
+    "playwright": "1.62.1",
     "publint": "^0.3.15",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.0",

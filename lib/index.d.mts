@@ -248,6 +248,10 @@ declare const FLIGHT_LIMITS: Readonly<{
 interface RequestFlightRecorderConfig {
   /** Maximum records retained in process memory. */
   capacity: number;
+  /** First-chunk latency classified as slow. */
+  slowFirstChunkMs: number;
+  /** Total request duration classified as slow. */
+  slowTotalMs: number;
 }
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -260,8 +264,12 @@ declare class RequestFlightRecorder extends Service implements FlightRecorderRea
   static inject: string[];
   static Config: z<Schemastery.ObjectS<{
     capacity: z<number, number>;
+    slowFirstChunkMs: z<number, number>;
+    slowTotalMs: z<number, number>;
   }>, Schemastery.ObjectT<{
     capacity: z<number, number>;
+    slowFirstChunkMs: z<number, number>;
+    slowTotalMs: z<number, number>;
   }>>;
   private readonly state;
   /**

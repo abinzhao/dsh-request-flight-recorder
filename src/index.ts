@@ -11,6 +11,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 import { registerFlightCommand } from './command.js'
 import { registerHarnessAdapter } from './harness-adapter.js'
+import { readFlightLocale } from './locale.js'
 import { FlightRecorderState } from './recorder-state.js'
 import type {
   FlightDiffResult,
@@ -30,6 +31,10 @@ export * from './public.js'
 export interface RequestFlightRecorderConfig {
   /** Maximum records retained in process memory. */
   capacity: number
+  /** First-chunk latency classified as slow. */
+  slowFirstChunkMs: number
+  /** Total request duration classified as slow. */
+  slowTotalMs: number
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -48,6 +53,16 @@ export default class RequestFlightRecorder
 
   static Config = z.object({
     capacity: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(128),
+    slowFirstChunkMs: z.number()
+      .step(1)
+      .min(1)
+      .max(Number.MAX_SAFE_INTEGER)
+      .default(1_000),
+    slowTotalMs: z.number()
+      .step(1)
+      .min(1)
+      .max(Number.MAX_SAFE_INTEGER)
+      .default(2_000),
   })
 
   private readonly state: FlightRecorderState
@@ -65,7 +80,14 @@ export default class RequestFlightRecorder
     })
     registerHarnessAdapter(ctx, this.state)
     ctx.inject(['commands'], commandCtx => {
-      registerFlightCommand(commandCtx, this)
+      registerFlightCommand(commandCtx, this, {
+        startupLocale: readFlightLocale(commandCtx),
+        currentLocale: () => readFlightLocale(commandCtx),
+        thresholds: {
+          slowFirstChunkMs: config.slowFirstChunkMs,
+          slowTotalMs: config.slowTotalMs,
+        },
+      })
     })
   }
 

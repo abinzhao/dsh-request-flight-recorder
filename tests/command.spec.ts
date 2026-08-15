@@ -7,6 +7,8 @@ import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { registerFlightCommand } from '../src/command.js'
 import RequestFlightRecorder from '../src/index.js'
+import type { FlightLocale } from '../src/locale.js'
+import { DEFAULT_DIAGNOSTIC_THRESHOLDS } from '../src/diagnostics.js'
 import { RECORDER_INFO } from '../src/recorder-state.js'
 import {
   type FlightRecord,
@@ -90,13 +92,23 @@ afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
 })
 
-async function commandWorld(records: readonly FlightRecord[]) {
+async function commandWorld(
+  records: readonly FlightRecord[],
+  options: {
+    readonly startupLocale?: FlightLocale
+    readonly currentLocale?: () => FlightLocale
+  } = {},
+) {
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(CommandRuntime)
   const agent = fakeAgent(ctx)
   const recorder = reader(records)
-  registerFlightCommand(ctx, recorder.value)
+  registerFlightCommand(ctx, recorder.value, {
+    startupLocale: options.startupLocale ?? 'en',
+    currentLocale: options.currentLocale ?? (() => 'en'),
+    thresholds: DEFAULT_DIAGNOSTIC_THRESHOLDS,
+  })
   return { ctx, agent, snapshotCalls: recorder.snapshotCalls }
 }
 
@@ -119,8 +131,10 @@ describe('optional flight command lifecycle', () => {
     const commands = ctx.commands
     expect(commands.list(agent)).toContainEqual({
       name: 'flight',
-      description: 'Inspect content-free model request diagnostics',
-      input: { hint: '[latest|list [limit]|show <id>|diff [from] [to]|health]' },
+      description: '检查不含正文的模型请求诊断',
+      input: {
+        hint: '[latest|list [failed|slow|truncated] [limit]|show <id>|diff [from] [to]|health|explain <id>|stats]',
+      },
     })
     expect(commands.find(agent, 'flight')?.recordInput).toBe(false)
 
@@ -156,6 +170,32 @@ describe('/flight', () => {
     sessionId: SessionId('session-b'),
   })
 
+  it('switches output immediately while registration metadata keeps its startup language', async () => {
+    let locale: FlightLocale = 'zh'
+    const { ctx, agent } = await commandWorld([current], {
+      startupLocale: 'zh',
+      currentLocale: () => locale,
+    })
+    const signal = new AbortController().signal
+
+    expect(ctx.commands.list(agent)).toContainEqual({
+      name: 'flight',
+      description: '检查不含正文的模型请求诊断',
+      input: {
+        hint: '[latest|list [failed|slow|truncated] [limit]|show <id>|diff [from] [to]|health|explain <id>|stats]',
+      },
+    })
+    const chinese = await ctx.commands.execute(agent, '/flight', signal)
+    locale = 'en'
+    const english = await ctx.commands.execute(agent, '/flight', signal)
+
+    expect(chinese?.result.text).toContain('飞行记录 abcdef12')
+    expect(english?.result.text).toContain('flight abcdef12')
+    expect(ctx.commands.list(agent)).toContainEqual(expect.objectContaining({
+      description: '检查不含正文的模型请求诊断',
+    }))
+  })
+
   it('lists only the invoking Session with default and explicit limits', async () => {
     const currentSession = Array.from({ length: 11 }, (_, index) => (
       flightRecord(`${String(index).padStart(8, '0')}-record`, {
@@ -177,10 +217,121 @@ describe('/flight', () => {
     expect(twenty?.result.text ?? '').not.toContain('session-b')
   })
 
+  it('filters failed, slow, and truncated records before applying the limit', async () => {
+    const failed = flightRecord('11111111-failed', {
+      outcome: {
+        kind: 'threw',
+        error: { kind: 'error' },
+        totalMs: 1,
+      },
+    })
+    const slow = flightRecord('22222222-slow', {
+      outcome: {
+        kind: 'finished',
+        finish: { kind: 'stop' },
+        totalMs: 2_000,
+      },
+    })
+    const truncated = flightRecord('33333333-truncated', {
+      omissions: {
+        ...current.omissions,
+        promptVariables: 1,
+      },
+    })
+    const { ctx, agent } = await commandWorld([
+      failed,
+      slow,
+      truncated,
+      otherSession,
+    ])
+    const signal = new AbortController().signal
+
+    expect((await ctx.commands.execute(
+      agent,
+      '/flight list failed 1',
+      signal,
+    ))?.result.text).toContain('11111111')
+    expect((await ctx.commands.execute(
+      agent,
+      '/flight list slow',
+      signal,
+    ))?.result.text).toContain('22222222')
+    expect((await ctx.commands.execute(
+      agent,
+      '/flight list truncated 20',
+      signal,
+    ))?.result.text).toContain('33333333')
+  })
+
+  it('explains a unique record and summarizes only the retained Session window', async () => {
+    const anomalous = flightRecord('11111111-anomalous', {
+      outcome: {
+        kind: 'threw',
+        error: { kind: 'timeout-error' },
+        firstChunkMs: 1_000,
+        totalMs: 2_000,
+      },
+    })
+    const { ctx, agent } = await commandWorld([
+      anomalous,
+      previous,
+      otherSession,
+    ], {
+      startupLocale: 'zh',
+      currentLocale: () => 'zh',
+    })
+    const signal = new AbortController().signal
+
+    const explanation = await ctx.commands.execute(
+      agent,
+      '/flight explain 1111',
+      signal,
+    )
+    const stats = await ctx.commands.execute(agent, '/flight stats', signal)
+
+    expect(explanation?.result).toMatchObject({
+      kind: 'success',
+      text: expect.stringContaining('飞行记录解释'),
+    })
+    expect(explanation?.result.text).toContain('首 Chunk 延迟达到慢请求阈值')
+    expect(explanation?.result.text).not.toContain('根因是')
+    expect(stats?.result).toMatchObject({
+      kind: 'success',
+      text: expect.stringContaining('当前 Session 保留窗口'),
+    })
+    expect(stats?.result.text).not.toContain('ffffeeee')
+  })
+
+  it('rejects malformed analysis grammar with localized usage', async () => {
+    const { ctx, agent } = await commandWorld([current], {
+      startupLocale: 'zh',
+      currentLocale: () => 'zh',
+    })
+    const signal = new AbortController().signal
+
+    for (const input of [
+      'list all extra',
+      'list all 1 extra',
+      'list failed 0',
+      'list slow 21',
+      'list unknown',
+      'list unknown 1',
+      'explain',
+      'explain a b',
+      'stats extra',
+    ]) {
+      const result = await ctx.commands.execute(agent, `/flight ${input}`, signal)
+      expect(result?.result).toEqual({
+        kind: 'error',
+        text: expect.stringMatching(/^用法：\/flight/u),
+      })
+    }
+  })
+
   it('rejects invalid list limits with stable usage and reports an empty list', async () => {
     const { ctx, agent } = await commandWorld([])
     const signal = new AbortController().signal
-    const usage = 'usage: /flight [latest|list [limit]|show <id>|diff [from] [to]|health]'
+    const usage = 'usage: /flight [latest|list [failed|slow|truncated] [limit]|show <id>|diff [from] [to]|health|explain <id>|stats]'
 
     for (const input of ['0', '21', '1.5', 'nope', '1 extra']) {
       const result = await ctx.commands.execute(agent, `/flight list ${input}`, signal)
@@ -237,6 +388,11 @@ describe('/flight', () => {
     const malformedShow = await ctx.commands.execute(agent, '/flight show', signal)
     const malformedDiff = await ctx.commands.execute(agent, '/flight diff abc', signal)
     const missing = await ctx.commands.execute(agent, '/flight show missing', signal)
+    const missingExplanation = await ctx.commands.execute(
+      agent,
+      '/flight explain missing',
+      signal,
+    )
     const ambiguous = await ctx.commands.execute(agent, '/flight show abc', signal)
     const crossSession = await ctx.commands.execute(agent, '/flight show ffffeeee', signal)
     const missingTo = await ctx.commands.execute(
@@ -250,6 +406,7 @@ describe('/flight', () => {
       malformedShow,
       malformedDiff,
       missing,
+      missingExplanation,
       ambiguous,
       crossSession,
       missingTo,
@@ -339,10 +496,13 @@ describe('/flight', () => {
     for (const input of [
       '/flight',
       '/flight list',
+      '/flight list failed',
       '/flight show abcdef',
       '/flight diff',
       '/flight diff 123456 abcdef',
       '/flight health',
+      '/flight explain abcdef',
+      '/flight stats',
     ]) {
       const before = snapshotCalls()
       await ctx.commands.execute(agent, input, signal)
