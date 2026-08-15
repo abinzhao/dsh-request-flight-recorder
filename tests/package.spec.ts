@@ -211,6 +211,28 @@ describe('distribution automation contract', () => {
     }
   })
 
+  it('defines a non-mutating candidate RC verifier with strict arguments', async () => {
+    const manifest = await readManifest()
+    const script = fileURLToPath(
+      new URL('../scripts/verify-dsh-candidate.mjs', import.meta.url),
+    )
+
+    expect(manifest.scripts['verify:dsh-candidate']).toBe(
+      'node scripts/verify-dsh-candidate.mjs',
+    )
+    for (const args of [
+      [],
+      ['0.1.0-rc.6', '0.1.0-rc.7'],
+      ['latest'],
+    ]) {
+      await expect(
+        execFileAsync(process.execPath, [script, ...args]),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining('用法'),
+      })
+    }
+  })
+
   it('runs every release gate in CI', async () => {
     const workflow = await readProjectFile('.github/workflows/ci.yml')
 
