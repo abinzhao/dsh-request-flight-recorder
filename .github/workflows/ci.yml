@@ -36,3 +36,5 @@ jobs:
         if: matrix.node == '22.19.0'
       - run: node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz
         if: matrix.node == '22.19.0'
+      - run: node scripts/verify-dsh-profile.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz
+        if: matrix.node == '22.19.0'

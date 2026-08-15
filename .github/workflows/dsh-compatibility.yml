@@ -1,0 +1,68 @@
+name: DSH Compatibility Observation
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      versions: ${{ steps.candidates.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+
+      - id: candidates
+        shell: bash
+        run: |
+          tags="$(npm view @deepseek-ai/dsh dist-tags --json)"
+          supported="$(node --input-type=module -e "import('./scripts/dsh-version.mjs').then(async m => process.stdout.write(await m.readSupportedDshVersion()))")"
+          versions="$(node -e "const tags=JSON.parse(process.argv[1]); const supported=process.argv[2]; const values=[...new Set([tags.latest,tags.next].filter(value => /^0\\.1\\.0-rc\\.\\d+$/.test(value) && value !== supported))]; process.stdout.write(JSON.stringify(values))" "$tags" "$supported")"
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+          if [ "$versions" = "[]" ]; then
+            echo "未发现新的 DSH RC；当前阻断版本为 $supported。" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "待观察 DSH RC：$versions" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  observe:
+    needs: discover
+    if: needs.discover.outputs.versions != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.discover.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - id: verify
+        continue-on-error: true
+        run: pnpm verify:dsh-candidate "${{ matrix.version }}"
+
+      - if: always()
+        shell: bash
+        run: |
+          echo "DSH ${{ matrix.version }}：${{ steps.verify.outcome }}" >> "$GITHUB_STEP_SUMMARY"

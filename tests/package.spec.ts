@@ -248,8 +248,32 @@ describe('distribution automation contract', () => {
       'pnpm exec publint',
       'mkdir -p .artifacts && pnpm pack --pack-destination .artifacts',
         'node scripts/smoke-packed.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz',
+        'node scripts/verify-dsh-profile.mjs .artifacts/dsh-request-flight-recorder-1.0.0.tgz',
     ]) {
       expect(workflow).toContain(command)
+    }
+  })
+
+  it('observes new DSH release candidates without repository writes', async () => {
+    const workflow = await readProjectFile(
+      '.github/workflows/dsh-compatibility.yml',
+    )
+
+    expect(workflow).toContain("cron: '17 3 * * *'")
+    expect(workflow).toContain('workflow_dispatch:')
+    expect(workflow).toContain('contents: read')
+    expect(workflow).toContain(
+      'npm view @deepseek-ai/dsh dist-tags --json',
+    )
+    expect(workflow).toContain('pnpm verify:dsh-candidate')
+    expect(workflow).toContain('$GITHUB_STEP_SUMMARY')
+    for (const forbidden of [
+      'git push',
+      'gh pr create',
+      'npm publish',
+      'contents: write',
+    ]) {
+      expect(workflow).not.toContain(forbidden)
     }
   })
 })
