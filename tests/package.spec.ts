@@ -141,6 +141,16 @@ describe('package contract', () => {
 })
 
 describe('distribution automation contract', () => {
+  it('derives one exact supported DSH RC without a duplicated version table', async () => {
+    const helper = await readProjectFile('scripts/dsh-version.mjs')
+    const smoke = await readProjectFile('scripts/smoke-packed.mjs')
+
+    expect(helper).toContain('readSupportedDshVersion')
+    expect(helper).toContain('/^0\\.1\\.0-rc\\.\\d+$/u')
+    expect(smoke).toContain('readPeerDependencies')
+    expect(smoke).not.toContain('const peerDependencies = {')
+  })
+
   it('defines a packed-consumer smoke script with exact peer coverage', async () => {
     const manifest = await readManifest()
     const smoke = await readProjectFile('scripts/smoke-packed.mjs')
@@ -160,10 +170,9 @@ describe('distribution automation contract', () => {
       expect(smoke).toContain('snapshot()')
       expect(smoke).toContain('subscribe(')
 
-    for (const [name, version] of Object.entries(manifest.peerDependencies)) {
-      expect(smoke).toContain(name)
-      expect(smoke).toContain(version)
-    }
+    expect(Object.keys(manifest.peerDependencies).length).toBeGreaterThan(0)
+    expect(smoke).toContain('const peerDependencies = await readPeerDependencies()')
+    expect(smoke).toContain('...peerDependencies')
   })
 
   it('requires exactly one tarball path', async () => {

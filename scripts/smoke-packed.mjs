@@ -3,19 +3,10 @@ import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { readPeerDependencies } from './dsh-version.mjs'
 
 const execFileAsync = promisify(execFile)
 const packageName = 'dsh-request-flight-recorder'
-const peerDependencies = {
-  '@deepseek-ai/cordis': '^4.0.1',
-  '@deepseek-ai/dsh-agent': '0.1.0-rc.6',
-  '@deepseek-ai/dsh-brand': '0.1.0-rc.6',
-  '@deepseek-ai/dsh-commands': '0.1.0-rc.6',
-  '@deepseek-ai/dsh-invariants': '0.1.0-rc.6',
-  '@deepseek-ai/dsh-llm': '0.1.0-rc.6',
-  '@deepseek-ai/dsh-session': '0.1.0-rc.6',
-  '@deepseek-ai/dsh-system-prompt': '0.1.0-rc.6',
-}
 
 function smokeSource() {
   return `
@@ -91,6 +82,7 @@ async function main() {
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'dsh-flight-recorder-'))
 
   try {
+    const peerDependencies = await readPeerDependencies()
     const manifest = {
       name: 'dsh-request-flight-recorder-smoke',
       private: true,
