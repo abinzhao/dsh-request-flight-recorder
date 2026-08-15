@@ -390,6 +390,26 @@ export default class RequestFlightRecorder extends Service {
     observation: FlightStreamObservation,
   ): void {
     if (observation.kind === 'first-chunk' || observation.kind === 'usage') return
+    if (
+      observation.kind === 'finished'
+      && (
+        observation.finish.kind === 'aborted'
+        || observation.finish.kind === 'error'
+      )
+    ) {
+      this.finishRecord(id, {
+        kind: 'threw',
+        error: { kind: 'error' },
+        ...(observation.firstChunkMs === undefined
+          ? {}
+          : { firstChunkMs: observation.firstChunkMs }),
+        totalMs: observation.totalMs,
+        ...(observation.usage === undefined
+          ? {}
+          : { usage: observation.usage }),
+      })
+      return
+    }
     if (observation.kind === 'threw') {
       this.finishRecord(id, {
         ...observation,

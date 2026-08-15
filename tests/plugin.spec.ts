@@ -349,6 +349,52 @@ describe('RequestFlightRecorder', () => {
     expect(world.recorder.get(record!.id)).toBe(record)
   })
 
+  it.each(['error', 'aborted'] as const)(
+    'redacts raw LLM failure fields from a %s finish',
+    async (kind) => {
+      const world = await createWorld()
+      const signal = new AbortController().signal
+      await prepareRequest(world, signal)
+      const finish = {
+        type: 'finish',
+        reason: {
+          kind,
+          failure: {
+            message: 'TOP_SECRET_FINISH_MESSAGE',
+            code: 'TOP_SECRET_FINISH_CODE',
+            requestId: 'TOP_SECRET_REQUEST_ID',
+          },
+        },
+      } as StreamChunk
+      const downstream = {
+        async *[Symbol.asyncIterator]() {
+          yield finish
+        },
+      }
+
+      const chunks = await consume(world.ctx.agents.withInitiator(
+        world.agent,
+        () => world.ctx.waterfall(
+          'llm/stream',
+          loopRequest(world.agent, signal),
+          () => downstream,
+        ),
+      ))
+
+      expect(chunks).toEqual([finish])
+      expect(chunks[0]).toBe(finish)
+      expect(world.recorder.latest()?.outcome).toEqual({
+        kind: 'threw',
+        error: { kind: 'error' },
+        firstChunkMs: expect.any(Number),
+        totalMs: expect.any(Number),
+      })
+      expect(JSON.stringify(world.recorder.snapshot())).not.toContain(
+        'TOP_SECRET',
+      )
+    },
+  )
+
   it('stores schema version and merged request/prompt omissions', async () => {
     const world = await createWorld()
     const signal = new AbortController().signal
