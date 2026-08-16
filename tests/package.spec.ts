@@ -252,8 +252,12 @@ describe('distribution automation contract', () => {
       expect(script).toContain(token)
     }
     expect(script).toContain("'pnpm-workspace.yaml'")
-    expect(script).toContain('onlyBuiltDependencies:')
-    expect(script).toContain('- node-pty')
+    expect(script).toContain('allowBuilds:')
+    expect(script).toContain("'@deepseek-ai/dsh-subprocess-local': true")
+    expect(script).toContain("'@google/genai': false")
+    expect(script).toContain('koffi: true')
+    expect(script).toContain('node-pty: true')
+    expect(script).toContain('protobufjs: false')
     expect(script).not.toContain("'--ignore-scripts'")
   })
 
@@ -277,8 +281,12 @@ describe('distribution automation contract', () => {
       expect(script).toContain(token)
     }
     expect(script).toContain("'pnpm-workspace.yaml'")
-    expect(script).toContain('onlyBuiltDependencies:')
-    expect(script).toContain('- node-pty')
+    expect(script).toContain('allowBuilds:')
+    expect(script).toContain("'@deepseek-ai/dsh-subprocess-local': true")
+    expect(script).toContain("'@google/genai': false")
+    expect(script).toContain('koffi: true')
+    expect(script).toContain('node-pty: true')
+    expect(script).toContain('protobufjs: false')
     expect(script).not.toContain("'--ignore-scripts'")
   })
 

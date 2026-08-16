@@ -104,7 +104,15 @@ async function main() {
   }))
   await writeFile(
     join(cliRoot, 'pnpm-workspace.yaml'),
-    'onlyBuiltDependencies:\n  - node-pty\n',
+    [
+      'allowBuilds:',
+      "  '@deepseek-ai/dsh-subprocess-local': true",
+      "  '@google/genai': false",
+      '  koffi: true',
+      '  node-pty: true',
+      '  protobufjs: false',
+      '',
+    ].join('\n'),
   )
   await run(
     'pnpm',
