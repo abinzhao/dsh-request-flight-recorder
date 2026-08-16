@@ -272,6 +272,8 @@ describe('distribution automation contract', () => {
     ]) {
       expect(script).toContain(token)
     }
+    expect(script).toContain("onlyBuiltDependencies: ['node-pty']")
+    expect(script).not.toContain("'--ignore-scripts'")
   })
 
   it('defines a non-mutating candidate RC verifier with strict arguments', async () => {
