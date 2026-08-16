@@ -5,6 +5,18 @@ function delay(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
 
+export function commandErrorDetail(error) {
+  if (error === null || typeof error !== 'object') return String(error)
+  return [
+    error.message,
+    error.stdout,
+    error.stderr,
+  ]
+    .filter(value => value !== undefined && value !== '')
+    .map(String)
+    .join('\n')
+}
+
 export async function navigateWhenReady(
   page,
   url,

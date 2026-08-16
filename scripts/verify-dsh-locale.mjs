@@ -14,7 +14,10 @@ import { promisify } from 'node:util'
 import { load, dump } from 'js-yaml'
 import { chromium } from 'playwright'
 import { readSupportedDshVersion } from './dsh-version.mjs'
-import { navigateWhenReady } from './web-gate.mjs'
+import {
+  commandErrorDetail,
+  navigateWhenReady,
+} from './web-gate.mjs'
 
 const execFileAsync = promisify(execFile)
 const STARTUP_TIMEOUT_MS = 30_000
@@ -60,11 +63,15 @@ async function reservePort() {
 }
 
 async function run(command, args, env, cwd = process.cwd()) {
-  return execFileAsync(command, args, {
-    cwd,
-    env,
-    maxBuffer: 16 * 1024 * 1024,
-  })
+  try {
+    return await execFileAsync(command, args, {
+      cwd,
+      env,
+      maxBuffer: 16 * 1024 * 1024,
+    })
+  } catch (error) {
+    throw new Error(commandErrorDetail(error), { cause: error })
+  }
 }
 
 async function waitForHttp(url, child, output) {

@@ -1,7 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
-import { navigateWhenReady } from '../scripts/web-gate.mjs'
+import {
+  commandErrorDetail,
+  navigateWhenReady,
+} from '../scripts/web-gate.mjs'
 
 describe('browser Web readiness gate', () => {
+  it('preserves command stdout and stderr for CI diagnosis', () => {
+    expect(commandErrorDetail({
+      message: 'command failed',
+      stdout: 'build stdout',
+      stderr: 'build stderr',
+    })).toBe('command failed\nbuild stdout\nbuild stderr')
+    expect(commandErrorDetail('failure')).toBe('failure')
+  })
+
   it('retries a transient connection refusal after the HTTP probe', async () => {
     const page = {
       goto: vi.fn()

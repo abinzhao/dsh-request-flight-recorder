@@ -14,6 +14,8 @@ export interface WebGateOptions {
   readonly retryMs?: number
 }
 
+export function commandErrorDetail(error: unknown): string
+
 export function navigateWhenReady(
   page: WebGatePage,
   url: string,
