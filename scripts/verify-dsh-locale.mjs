@@ -14,6 +14,7 @@ import { promisify } from 'node:util'
 import { load, dump } from 'js-yaml'
 import { chromium } from 'playwright'
 import { readSupportedDshVersion } from './dsh-version.mjs'
+import { navigateWhenReady } from './web-gate.mjs'
 
 const execFileAsync = promisify(execFile)
 const STARTUP_TIMEOUT_MS = 30_000
@@ -199,7 +200,7 @@ async function verifyCase(testCase, dshBin, tarballPath, rootEnv, root) {
     page.on('requestfailed', () => {
       requestFailures += 1
     })
-    await page.goto(url, { waitUntil: 'domcontentloaded' })
+    await navigateWhenReady(page, url, child, output)
     try {
       await waitForPreference(settingsPath, testCase.expected)
     } catch (error) {
