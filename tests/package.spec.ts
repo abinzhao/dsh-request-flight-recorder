@@ -251,6 +251,8 @@ describe('distribution automation contract', () => {
     ]) {
       expect(script).toContain(token)
     }
+    expect(script).toContain("onlyBuiltDependencies: ['node-pty']")
+    expect(script).not.toContain("'--ignore-scripts'")
   })
 
   it('defines an isolated browser locale synchronization gate', async () => {

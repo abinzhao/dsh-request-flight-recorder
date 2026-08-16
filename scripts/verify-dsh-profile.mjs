@@ -96,10 +96,13 @@ async function main() {
     name: 'dsh-flight-profile-cli',
     private: true,
     packageManager: 'pnpm@11.7.0',
+    pnpm: {
+      onlyBuiltDependencies: ['node-pty'],
+    },
   }))
   await run(
     'pnpm',
-    ['add', '--ignore-scripts', '--lockfile=false', dshSpec],
+    ['add', '--lockfile=false', dshSpec],
     env,
     cliRoot,
   )
