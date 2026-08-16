@@ -266,10 +266,11 @@ async function main() {
       name: 'dsh-flight-locale-cli',
       private: true,
       packageManager: 'pnpm@11.7.0',
-      pnpm: {
-        onlyBuiltDependencies: ['node-pty'],
-      },
     }))
+    await writeFile(
+      join(cliRoot, 'pnpm-workspace.yaml'),
+      'onlyBuiltDependencies:\n  - node-pty\n',
+    )
     await run(
       'pnpm',
       [

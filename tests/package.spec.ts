@@ -251,7 +251,9 @@ describe('distribution automation contract', () => {
     ]) {
       expect(script).toContain(token)
     }
-    expect(script).toContain("onlyBuiltDependencies: ['node-pty']")
+    expect(script).toContain("'pnpm-workspace.yaml'")
+    expect(script).toContain('onlyBuiltDependencies:')
+    expect(script).toContain('- node-pty')
     expect(script).not.toContain("'--ignore-scripts'")
   })
 
@@ -274,7 +276,9 @@ describe('distribution automation contract', () => {
     ]) {
       expect(script).toContain(token)
     }
-    expect(script).toContain("onlyBuiltDependencies: ['node-pty']")
+    expect(script).toContain("'pnpm-workspace.yaml'")
+    expect(script).toContain('onlyBuiltDependencies:')
+    expect(script).toContain('- node-pty')
     expect(script).not.toContain("'--ignore-scripts'")
   })
 
